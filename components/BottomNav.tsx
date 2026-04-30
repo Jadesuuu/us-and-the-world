@@ -5,31 +5,36 @@ export type Tab = "map" | "add" | "memories";
 interface Props {
   active: Tab;
   onChange: (tab: Tab) => void;
+  hidden?: boolean;
 }
 
-export default function BottomNav({ active, onChange }: Props) {
+export default function BottomNav({ active, onChange, hidden = false }: Props) {
   return (
-    <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center pb-[max(env(safe-area-inset-bottom),0.5rem)]">
-      <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-zinc-800 bg-zinc-950/90 p-1 shadow-lg backdrop-blur">
+    <nav
+      aria-hidden={hidden}
+      className={`pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center pb-[max(env(safe-area-inset-bottom),0.5rem)] transition-transform duration-200 ease-out ${
+        hidden ? "translate-y-full" : "translate-y-0"
+      }`}
+    >
+      <div
+        className="pointer-events-auto flex items-center gap-1 rounded-full bg-surface p-1 shadow-md"
+        style={{ border: "1px solid var(--border)" }}
+      >
         <TabButton
-          label="Map"
+          label="Dreaming"
           isActive={active === "map"}
           onClick={() => onChange("map")}
         />
         <button
           type="button"
-          aria-label="Add pin"
+          aria-label="Drop a dream"
           onClick={() => onChange("add")}
-          className={`flex h-12 w-12 items-center justify-center rounded-full text-2xl font-light transition-colors ${
-            active === "add"
-              ? "bg-white text-zinc-950"
-              : "bg-zinc-100 text-zinc-950 hover:bg-white"
-          }`}
+          className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-2xl font-light text-bg"
         >
           +
         </button>
         <TabButton
-          label="Memories"
+          label="Lived"
           isActive={active === "memories"}
           onClick={() => onChange("memories")}
         />
@@ -51,8 +56,8 @@ function TabButton({
     <button
       type="button"
       onClick={onClick}
-      className={`px-4 h-10 rounded-full text-sm font-medium transition-colors ${
-        isActive ? "text-white" : "text-zinc-400 hover:text-zinc-200"
+      className={`px-4 h-10 rounded-full font-display text-base ${
+        isActive ? "italic text-ink" : "text-ink-soft"
       }`}
     >
       {label}

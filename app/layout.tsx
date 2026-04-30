@@ -1,25 +1,36 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Fraunces, Inter, Caveat } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
+import { ThemeProvider } from "@/components/ThemeProvider";
+import GalaxyStars from "@/components/GalaxyStars";
+import { Toaster } from "sonner";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
+  subsets: ["latin"],
+  axes: ["opsz"],
+  style: ["normal", "italic"],
+});
+
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const caveat = Caveat({
+  variable: "--font-caveat",
   subsets: ["latin"],
+  weight: ["400"],
 });
 
 export const metadata: Metadata = {
-  title: "Us & The World",
-  description: "Us & The World",
+  title: "JF & The World",
+  description: "JF & The World",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    title: "Us & The World",
+    title: "JF & The World",
     statusBarStyle: "black-translucent",
   },
   icons: {
@@ -29,11 +40,19 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#09090b",
+  themeColor: "#f7f1e8",
   viewportFit: "cover",
   width: "device-width",
   initialScale: 1,
 };
+
+const fouc = `try {
+  var t = localStorage.getItem('jf-theme') || 'auto';
+  if (t === 'auto') {
+    t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'dream';
+  }
+  document.documentElement.setAttribute('data-theme', t);
+} catch (e) {}`;
 
 export default function RootLayout({
   children,
@@ -43,10 +62,30 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
+      className={`${fraunces.variable} ${inter.variable} ${caveat.variable} h-full antialiased`}
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: fouc }} />
+      </head>
       <body className="h-full flex flex-col">
-        <Providers>{children}</Providers>
+        <ThemeProvider>
+          <GalaxyStars />
+          <Providers>
+            {children}
+            <Toaster
+              position="bottom-center"
+              toastOptions={{
+                style: {
+                  background: "var(--surface)",
+                  color: "var(--ink)",
+                  border: "1px solid var(--border)",
+                  fontFamily: "var(--font-body)",
+                },
+              }}
+            />
+          </Providers>
+        </ThemeProvider>
       </body>
     </html>
   );

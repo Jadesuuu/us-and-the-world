@@ -18,6 +18,24 @@ export function RealtimeBridge() {
           queryClient.invalidateQueries({ queryKey: ["pins"] });
         },
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "visits" },
+        () => {
+          // A new/edited/deleted visit affects:
+          //   - the per-pin timeline (queryKey starts with "visits")
+          //   - the pin's derived has_visits flag (queryKey ["pins"])
+          queryClient.invalidateQueries({ queryKey: ["visits"] });
+          queryClient.invalidateQueries({ queryKey: ["pins"] });
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "visit_photos" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["visits"] });
+        },
+      )
       .subscribe();
 
     return () => {

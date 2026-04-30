@@ -1,26 +1,171 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ------------------------------------------------------------------
+   Theme variables — same names across all themes so components don't
+   have to know which one is active. Set on documentElement via
+   data-theme by the FOUC script in <head> and by ThemeProvider.
+   ------------------------------------------------------------------ */
+
+:root,
+[data-theme="dream"] {
+  --bg: #f7f1e8;
+  --surface: #e8d9b8;
+  --ink: #3c2e1f;
+  --ink-soft: #6b5847;
+  --accent: #c8553d;
+  --accent-2: #5c7a6f;
+  --pin-jade: #4a7ab0;
+  --pin-frances: #d88578;
+  --border: rgba(60, 46, 31, 0.12);
 }
+
+[data-theme="night"] {
+  --bg: #0f1729;
+  --surface: #1f2a44;
+  --ink: #e6ecf5;
+  --ink-soft: #9babcb;
+  --accent: #f4955c;
+  --accent-2: #76b0a4;
+  --pin-jade: #7ba4d0;
+  --pin-frances: #e89bab;
+  --border: rgba(230, 236, 245, 0.10);
+}
+
+[data-theme="galaxy"] {
+  --bg: #0e0b26;
+  --surface: #1e1a45;
+  --ink: #e8ddff;
+  --ink-soft: #9d93c4;
+  --accent: #b89aff;
+  --accent-2: #3d5a80;
+  --pin-jade: #7ba8e0;
+  --pin-frances: #c5a8ff;
+  --border: rgba(232, 221, 255, 0.10);
+}
+
+[data-theme="paper"] {
+  --bg: #faf7f0;
+  --surface: #ece5d5;
+  --ink: #2e2a24;
+  --ink-soft: #5c5448;
+  --accent: #8b5a3c;
+  --accent-2: #4a6b5e;
+  --pin-jade: #3a5c7f;
+  --pin-frances: #b07a65;
+  --border: rgba(46, 42, 36, 0.12);
+}
+
+/* ------------------------------------------------------------------
+   Expose theme variables as Tailwind colors. `@theme inline` keeps
+   the var() references intact, so `bg-bg`, `text-ink-soft`, etc.
+   resolve at paint time and re-theme instantly when the data-theme
+   attribute flips — without a full class re-cascade.
+   ------------------------------------------------------------------ */
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-pin-jade: var(--pin-jade);
+  --color-pin-frances: var(--pin-frances);
+  --color-border: var(--border);
+
+  --font-display: var(--font-fraunces), Georgia, "Times New Roman", serif;
+  --font-body: var(--font-inter), system-ui, -apple-system, sans-serif;
+  --font-handwritten: var(--font-caveat), "Comic Sans MS", cursive;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  html {
+    color-scheme: light dark;
+  }
+
+  html,
+  body {
+    background-color: var(--bg);
+    color: var(--ink);
+    /* Kill mobile rubber-band overscroll so the body bg never peeks out
+       below or above the map when the user pans hard. */
+    overscroll-behavior: none;
+    overflow: hidden;
+  }
+
+  body {
+    font-family: var(--font-body);
+    /* Use dynamic viewport height where supported so the address bar
+       collapsing on mobile doesn't leave a gap at the bottom. */
+    height: 100vh;
+    height: 100dvh;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ------------------------------------------------------------------
+   The single allowed animation: a new pin scales in over 400ms with
+   a slight overshoot. transformOrigin is the bottom of the teardrop.
+   ------------------------------------------------------------------ */
+
+@keyframes pin-drop-in {
+  0% {
+    transform: rotate(var(--rot, 0deg)) scale(0);
+  }
+  60% {
+    transform: rotate(var(--rot, 0deg)) scale(1.15);
+  }
+  100% {
+    transform: rotate(var(--rot, 0deg)) scale(1);
+  }
+}
+
+.pin-drop-in {
+  animation: pin-drop-in 400ms ease-out;
+  transform-origin: bottom center;
+}
+
+.pin-rotate {
+  transform: rotate(var(--rot, 0deg));
+  transform-origin: bottom center;
+}
+
+/* Search-result preview marker pulse. Repeats indefinitely until the
+   sheet is dismissed (the marker unmounts). */
+@keyframes pin-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.15);
+  }
+}
+
+.pin-pulse {
+  animation: pin-pulse 1600ms ease-in-out infinite;
+  transform-origin: bottom center;
+}
+
+/* Galaxy theme: a sparser, larger star layer that only appears when the
+   map is in 3D mode (i.e. a pin drawer is open). It rotates slowly with
+   the camera bearing, giving a parallax sense of depth. The 0.15
+   multiplier means the stars rotate 1/7 as much as the bearing — they
+   feel far away rather than locked to the camera. --bearing is set on
+   <html> by the Map component. */
+.galaxy-stars-deep {
+  opacity: 0;
+  transition:
+    opacity 800ms ease,
+    transform 100ms linear;
+  transform: rotate(calc(var(--bearing, 0) * -0.15deg));
+}
+
+[data-map-mode="3d"] .galaxy-stars-deep {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .galaxy-stars-deep {
+    transition: opacity 0ms;
+    transform: none;
+  }
 }

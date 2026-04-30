@@ -34,11 +34,16 @@ export default function LoginPage() {
   const disabled = status === "sending" || status === "sent";
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-        <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
-        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          We&rsquo;ll email you a magic link.
+    <div className="flex min-h-screen items-center justify-center bg-bg px-4">
+      <div
+        className="w-full max-w-md rounded-2xl bg-surface p-8"
+        style={{ border: "1px solid var(--border)" }}
+      >
+        <h1 className="font-display italic text-3xl text-ink">
+          JF &amp; The World
+        </h1>
+        <p className="mt-2 text-sm text-ink-soft">
+          for us — a magic link is on its way.
         </p>
 
         <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-3">
@@ -50,28 +55,29 @@ export default function LoginPage() {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
             disabled={disabled}
-            className="h-12 w-full rounded-lg border border-zinc-300 bg-white px-4 text-base outline-none focus:border-zinc-900 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-100"
+            className="h-12 w-full rounded-lg bg-bg px-4 text-base text-ink outline-none placeholder:text-ink-soft disabled:opacity-60"
+            style={{ border: "1px solid var(--border)" }}
           />
           <button
             type="submit"
             disabled={disabled || !email}
-            className="h-12 w-full rounded-lg bg-zinc-900 text-base font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            className="h-12 w-full rounded-lg bg-accent font-display italic text-lg text-bg disabled:opacity-50"
           >
             {status === "sending"
-              ? "Sending…"
+              ? "sending…"
               : status === "sent"
                 ? "Check your email"
-                : "Send magic link"}
+                : "Send the link"}
           </button>
         </form>
 
         {status === "sent" && (
-          <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
-            Sent. Click the link in your inbox to finish signing in.
+          <p className="mt-4 font-handwritten text-[18px] text-ink">
+            Sent. Click the link in your inbox.
           </p>
         )}
         {status === "error" && errorMessage && (
-          <p className="mt-4 text-sm text-red-600">{errorMessage}</p>
+          <p className="mt-4 text-sm text-accent">{errorMessage}</p>
         )}
       </div>
     </div>

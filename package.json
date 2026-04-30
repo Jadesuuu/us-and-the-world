@@ -8,19 +8,24 @@
     "start": "next start"
   },
   "dependencies": {
+    "@googlemaps/js-api-loader": "^2.0.2",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.105.1",
     "@tanstack/react-query": "^5.100.6",
     "cloudinary": "^2.10.0",
+    "framer-motion": "^12.38.0",
+    "lucide-react": "^1.14.0",
     "mapbox-gl": "^3.23.0",
     "next": "^15.5.15",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-map-gl": "^8.1.1",
+    "sonner": "^2.0.7",
     "vaul": "^1.1.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/google.maps": "^3.64.0",
     "@types/node": "^20",
     "@types/react": "^18.3.28",
     "@types/react-dom": "^18.3.7",

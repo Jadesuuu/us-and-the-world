@@ -1,37 +1,158 @@
 "use client";
 
-import { useMemo } from "react";
-import { Map as MapboxMap, Marker } from "react-map-gl/mapbox";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+} from "react";
+import {
+  Map as MapboxMap,
+  Marker,
+  type MapRef,
+} from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { usePins, type Pin } from "@/hooks/usePins";
 import { useProfiles, type Profile } from "@/hooks/useProfiles";
+import { useTheme } from "./ThemeProvider";
+import { themesById } from "@/lib/themes";
+import {
+  CAMERA_PROFILES,
+  PIN_SWITCH_DURATION_MS,
+  RETURN_TO_FLAT,
+} from "@/lib/map-cameras";
+import PinMarker, { rotationFromId } from "./PinMarker";
 
 const FALLBACK_VIEW = { latitude: 20, longitude: 0, zoom: 1.5 };
 
 export type LatLng = { lat: number; lng: number };
 
+export interface MapHandle {
+  flyTo: (latlng: LatLng, zoom?: number) => void;
+}
+
 interface Props {
   onMarkerClick?: (pinId: string) => void;
   onMapClick?: (latlng: LatLng) => void;
   pendingLatLng?: LatLng | null;
+  recentlyAddedId?: string | null;
+  previewLatLng?: LatLng | null;
+  selectedLatLng?: LatLng | null;
 }
 
-const COLOR_BY_NAME: Record<string, string> = {
-  Jade: "#3b82f6", // blue-500
-  Frances: "#ec4899", // pink-500
-};
-const COLOR_DONE = "#10b981"; // emerald-500
-const COLOR_FALLBACK = "#71717a"; // zinc-500
+// ============================================================
+// Helpers
+// ============================================================
 
-function pinColor(
+function readVar(name: string): string {
+  return getComputedStyle(document.documentElement)
+    .getPropertyValue(name)
+    .trim();
+}
+
+function applyPaintOverrides(map: mapboxgl.Map) {
+  const accent2 = readVar("--accent-2");
+  const bg = readVar("--bg");
+  if (!accent2 || !bg) return;
+
+  if (map.getLayer("water")) {
+    map.setPaintProperty("water", "fill-color", accent2);
+  }
+  for (const layer of ["land", "background"]) {
+    const def = map.getLayer(layer);
+    if (!def) continue;
+    const prop =
+      def.type === "background" ? "background-color" : "fill-color";
+    map.setPaintProperty(layer, prop, bg);
+  }
+}
+
+const BUILDINGS_LAYER_ID = "jf-3d-buildings";
+
+function add3DBuildings(map: mapboxgl.Map) {
+  // Mapbox doesn't accept CSS variable strings in paint; resolve them.
+  const surface = readVar("--surface");
+  const accent2 = readVar("--accent-2");
+  if (!surface || !accent2) return;
+
+  // composite source / building layer aren't always present (custom styles).
+  if (!map.getSource("composite")) return;
+
+  if (map.getLayer(BUILDINGS_LAYER_ID)) {
+    map.removeLayer(BUILDINGS_LAYER_ID);
+  }
+
+  map.addLayer({
+    id: BUILDINGS_LAYER_ID,
+    source: "composite",
+    "source-layer": "building",
+    filter: ["==", "extrude", "true"],
+    type: "fill-extrusion",
+    minzoom: 14,
+    paint: {
+      "fill-extrusion-color": [
+        "interpolate",
+        ["linear"],
+        ["get", "height"],
+        0,
+        surface,
+        100,
+        accent2,
+      ],
+      "fill-extrusion-height": [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        14,
+        0,
+        15.5,
+        ["get", "height"],
+      ],
+      "fill-extrusion-base": ["get", "min_height"],
+      "fill-extrusion-opacity": 0.85,
+    },
+  });
+}
+
+function addTerrain(map: mapboxgl.Map) {
+  if (!map.getSource("mapbox-dem")) {
+    map.addSource("mapbox-dem", {
+      type: "raster-dem",
+      url: "mapbox://mapbox.mapbox-terrain-dem-v1",
+      tileSize: 512,
+      maxzoom: 14,
+    });
+  }
+  map.setTerrain({ source: "mapbox-dem", exaggeration: 1.2 });
+}
+
+function applyEnhancements(map: mapboxgl.Map) {
+  applyPaintOverrides(map);
+  add3DBuildings(map);
+  addTerrain(map);
+}
+
+function reducedMotion(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+function pinFillForTheme(
   pin: Pin,
   profilesByUser: Record<string, Profile>,
 ): string {
-  if (pin.is_done) return COLOR_DONE;
-  if (!pin.created_by) return COLOR_FALLBACK;
+  // Visited pins use --ink — the theme's foreground color — so they
+  // read as a "marked off" stamp at maximum contrast against the bg
+  // in every theme. Creator distinction is dropped once visited; the
+  // memory takes precedence over who pinned it.
+  if (pin.has_visits) return "var(--ink)";
+  if (!pin.created_by) return "var(--accent)";
   const profile = profilesByUser[pin.created_by];
-  if (!profile) return COLOR_FALLBACK;
-  return COLOR_BY_NAME[profile.display_name] ?? COLOR_FALLBACK;
+  if (!profile) return "var(--accent)";
+  if (profile.display_name === "Jade") return "var(--pin-jade)";
+  if (profile.display_name === "Frances") return "var(--pin-frances)";
+  return "var(--accent)";
 }
 
 function computeCenter(pins: Pin[]) {
@@ -45,14 +166,25 @@ function computeCenter(pins: Pin[]) {
   return { latitude: lat, longitude: lng, zoom: 3 };
 }
 
-export default function Map({
-  onMarkerClick,
-  onMapClick,
-  pendingLatLng,
-}: Props) {
+// ============================================================
+// Component
+// ============================================================
+
+const Map = forwardRef<MapHandle, Props>(function Map(
+  {
+    onMarkerClick,
+    onMapClick,
+    pendingLatLng,
+    recentlyAddedId,
+    previewLatLng,
+    selectedLatLng,
+  },
+  ref,
+) {
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
   const { data: pins, isLoading, error } = usePins();
   const { data: profiles } = useProfiles();
+  const { resolvedTheme } = useTheme();
 
   const profilesByUser = useMemo(() => {
     const m: Record<string, Profile> = {};
@@ -62,14 +194,231 @@ export default function Map({
     return m;
   }, [profiles]);
 
+  const mapRef = useRef<MapRef | null>(null);
+  // Set the moment a pin is opened, cleared after returning to flat.
+  // Non-null === we're currently in 3D mode for some pin.
+  const savedCameraRef = useRef<{
+    center: [number, number];
+    zoom: number;
+    pitch: number;
+    bearing: number;
+  } | null>(null);
+  const prevSelectedRef = useRef<LatLng | null>(null);
+
+  const mapStyle = themesById[resolvedTheme].mapStyle;
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      flyTo: (latlng, zoom = 16) => {
+        const map = mapRef.current?.getMap();
+        if (!map) return;
+        if (reducedMotion()) {
+          map.jumpTo({ center: [latlng.lng, latlng.lat], zoom });
+          return;
+        }
+        map.flyTo({
+          center: [latlng.lng, latlng.lat],
+          zoom,
+          duration: 1200,
+          essential: true,
+        });
+      },
+    }),
+    [],
+  );
+
   const initialViewState = useMemo(
     () => computeCenter(pins ?? []),
     [pins],
   );
 
+  // ----------------------------------------------------------
+  // Re-apply enhancements when the theme switches the style URL.
+  // ----------------------------------------------------------
+
+  const lastStyle = useRef<string | null>(null);
+  useEffect(() => {
+    if (lastStyle.current === null) {
+      lastStyle.current = mapStyle;
+      return;
+    }
+    if (lastStyle.current === mapStyle) return;
+
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+
+    lastStyle.current = mapStyle;
+    map.setStyle(mapStyle);
+
+    // setStyle() wipes the buildings layer, terrain, and paint overrides —
+    // reapply them all once the new style finishes loading.
+    const onceLoaded = () => applyEnhancements(map);
+    map.once("style.load", onceLoaded);
+    return () => {
+      map.off("style.load", onceLoaded);
+    };
+  }, [mapStyle]);
+
+  // ----------------------------------------------------------
+  // Cinematic camera on pin open / close
+  // ----------------------------------------------------------
+
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+
+    const wasSelected = prevSelectedRef.current != null;
+    const isSelected = selectedLatLng != null;
+
+    if (isSelected) {
+      const profile = CAMERA_PROFILES[resolvedTheme];
+
+      // First open: snapshot the current 2D camera so we can return to it.
+      // Pin-switch (savedCameraRef already has a value) keeps the original
+      // snapshot intact — we want to fall back to the *original* 2D view,
+      // not the previous pin's 3D angle.
+      if (!savedCameraRef.current) {
+        const c = map.getCenter();
+        savedCameraRef.current = {
+          center: [c.lng, c.lat],
+          zoom: map.getZoom(),
+          pitch: map.getPitch(),
+          bearing: map.getBearing(),
+        };
+      }
+
+      const isPinSwitch = wasSelected;
+      const duration = isPinSwitch
+        ? PIN_SWITCH_DURATION_MS
+        : profile.duration;
+
+      // On mobile, push the camera target down so the pin sits above the
+      // drawer rather than under it. Mapbox's `padding` shifts the
+      // effective center on the projected viewport.
+      const isMobile =
+        typeof window !== "undefined" && window.innerWidth < 768;
+      const drawerHeight = window.innerHeight * 0.6;
+      const padding = isMobile
+        ? { top: 0, right: 0, bottom: drawerHeight * 0.4, left: 0 }
+        : undefined;
+
+      const target = {
+        center: [selectedLatLng.lng, selectedLatLng.lat] as [number, number],
+        zoom: profile.zoom,
+        pitch: profile.pitch,
+        bearing: profile.bearing,
+        padding,
+      };
+
+      if (reducedMotion()) {
+        map.jumpTo(target);
+      } else {
+        map.flyTo({
+          ...target,
+          duration,
+          curve: profile.curve,
+          speed: profile.speed,
+          essential: true,
+        });
+      }
+
+      // Lock pan/scroll while the pin view is "ceremonial".
+      // Rotate stays enabled — the user can still look around the pin.
+      map.dragPan.disable();
+      map.scrollZoom.disable();
+      map.dragRotate.enable();
+
+      document.documentElement.dataset.mapMode = "3d";
+    } else if (wasSelected) {
+      // Drawer closed — fly back to the saved 2D state.
+      const cam = savedCameraRef.current;
+      if (cam) {
+        const params = {
+          center: cam.center,
+          zoom: cam.zoom,
+          pitch: 0,
+          bearing: 0,
+          padding: { top: 0, right: 0, bottom: 0, left: 0 },
+        };
+
+        if (reducedMotion()) {
+          map.jumpTo(params);
+        } else {
+          map.flyTo({
+            ...params,
+            duration: RETURN_TO_FLAT.duration,
+            curve: RETURN_TO_FLAT.curve,
+            speed: RETURN_TO_FLAT.speed,
+            essential: true,
+          });
+        }
+
+        savedCameraRef.current = null;
+      }
+
+      // Restore gestures.
+      map.dragPan.enable();
+      map.scrollZoom.enable();
+
+      delete document.documentElement.dataset.mapMode;
+    }
+
+    prevSelectedRef.current = selectedLatLng ?? null;
+  }, [selectedLatLng, resolvedTheme]);
+
+  // ----------------------------------------------------------
+  // Bearing → CSS variable, for the Galaxy parallax stars
+  // ----------------------------------------------------------
+
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    const handler = () => {
+      document.documentElement.style.setProperty(
+        "--bearing",
+        String(map.getBearing()),
+      );
+    };
+    handler(); // seed once
+    map.on("rotate", handler);
+    map.on("rotateend", handler);
+    return () => {
+      map.off("rotate", handler);
+      map.off("rotateend", handler);
+    };
+  }, []);
+
+  // ----------------------------------------------------------
+  // Performance: cap pitch on high-DPI devices, log slow first loads.
+  // ----------------------------------------------------------
+
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    if (window.devicePixelRatio > 2.5) {
+      map.setMaxPitch(60);
+    }
+    const start = performance.now();
+    const onIdle = () => {
+      const elapsed = performance.now() - start;
+      if (elapsed > 2000) {
+        console.warn(
+          `[Map] First-idle took ${Math.round(elapsed)}ms — 3D may stutter on this device.`,
+        );
+      }
+      map.off("idle", onIdle);
+    };
+    map.once("idle", onIdle);
+  }, []);
+
+  // ----------------------------------------------------------
+  // Render
+  // ----------------------------------------------------------
+
   if (!token) {
     return (
-      <div className="flex h-full w-full items-center justify-center text-sm text-zinc-400">
+      <div className="flex h-full w-full items-center justify-center text-sm text-ink-soft">
         Missing NEXT_PUBLIC_MAPBOX_TOKEN
       </div>
     );
@@ -77,56 +426,95 @@ export default function Map({
 
   if (isLoading) {
     return (
-      <div className="flex h-full w-full items-center justify-center text-sm text-zinc-400">
-        Loading map…
+      <div className="flex h-full w-full items-center justify-center font-display italic text-ink-soft">
+        loading…
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex h-full w-full items-center justify-center text-sm text-red-500">
+      <div className="flex h-full w-full items-center justify-center text-sm text-accent">
         Failed to load pins: {error.message}
       </div>
     );
   }
 
-  return (
-    <MapboxMap
-      mapboxAccessToken={token}
-      initialViewState={initialViewState}
-      mapStyle="mapbox://styles/mapbox/dark-v11"
-      style={{ width: "100%", height: "100%" }}
-      onClick={(e) => {
-        if (!onMapClick) return;
-        onMapClick({ lat: e.lngLat.lat, lng: e.lngLat.lng });
-      }}
-    >
-      {(pins ?? []).map((pin) =>
-        pin.lat != null && pin.lng != null ? (
-          <Marker
-            key={pin.id}
-            latitude={pin.lat}
-            longitude={pin.lng}
-            anchor="bottom"
-            color={pinColor(pin, profilesByUser)}
-            onClick={(e) => {
-              e.originalEvent.stopPropagation();
-              onMarkerClick?.(pin.id);
-            }}
-          />
-        ) : null,
-      )}
-
-      {pendingLatLng && (
-        <Marker
-          latitude={pendingLatLng.lat}
-          longitude={pendingLatLng.lng}
-          anchor="center"
-        >
-          <div className="h-4 w-4 animate-pulse rounded-full border-2 border-white bg-amber-400 shadow-lg" />
-        </Marker>
-      )}
-    </MapboxMap>
+  const hasAnyPin = (pins ?? []).some(
+    (p) => p.lat != null && p.lng != null,
   );
-}
+
+  return (
+    <div className="relative h-full w-full">
+      <MapboxMap
+        ref={mapRef}
+        mapboxAccessToken={token}
+        initialViewState={initialViewState}
+        mapStyle={mapStyle}
+        style={{ width: "100%", height: "100%" }}
+        maxPitch={85}
+        onLoad={(e) => applyEnhancements(e.target)}
+        onClick={(e) => {
+          if (!onMapClick) return;
+          onMapClick({ lat: e.lngLat.lat, lng: e.lngLat.lng });
+        }}
+      >
+        {(pins ?? []).map((pin) =>
+          pin.lat != null && pin.lng != null ? (
+            <Marker
+              key={pin.id}
+              latitude={pin.lat}
+              longitude={pin.lng}
+              anchor="bottom"
+              onClick={(e) => {
+                e.originalEvent.stopPropagation();
+                onMarkerClick?.(pin.id);
+              }}
+            >
+              <PinMarker
+                fill={pinFillForTheme(pin, profilesByUser)}
+                rotation={rotationFromId(pin.id)}
+                animate={pin.id === recentlyAddedId}
+                visitDayCount={pin.visit_day_count}
+              />
+            </Marker>
+          ) : null,
+        )}
+
+        {pendingLatLng && (
+          <Marker
+            latitude={pendingLatLng.lat}
+            longitude={pendingLatLng.lng}
+            anchor="bottom"
+          >
+            <div style={{ opacity: 0.55 }}>
+              <PinMarker fill="var(--accent)" rotation={0} />
+            </div>
+          </Marker>
+        )}
+
+        {previewLatLng && (
+          <Marker
+            latitude={previewLatLng.lat}
+            longitude={previewLatLng.lng}
+            anchor="bottom"
+          >
+            <div className="pin-pulse">
+              <PinMarker fill="var(--accent)" rotation={0} size={36} />
+            </div>
+          </Marker>
+        )}
+      </MapboxMap>
+
+      {!hasAnyPin && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-8">
+          <p className="font-display italic text-2xl text-ink-soft text-center max-w-xs leading-snug">
+            A blank world. Drop your first dream.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+});
+
+export default Map;

@@ -6,7 +6,9 @@ type SignatureResponse = {
   folder: string;
 };
 
-export async function uploadPhoto(file: File): Promise<{ url: string }> {
+export async function uploadPhoto(
+  file: File,
+): Promise<{ url: string; publicId: string }> {
   const sigRes = await fetch("/api/cloudinary-signature", { method: "POST" });
   if (!sigRes.ok) {
     const body = (await sigRes.json().catch(() => null)) as
@@ -36,6 +38,9 @@ export async function uploadPhoto(file: File): Promise<{ url: string }> {
     throw new Error(`Cloudinary upload failed: ${text}`);
   }
 
-  const data = (await uploadRes.json()) as { secure_url: string };
-  return { url: data.secure_url };
+  const data = (await uploadRes.json()) as {
+    secure_url: string;
+    public_id: string;
+  };
+  return { url: data.secure_url, publicId: data.public_id };
 }
