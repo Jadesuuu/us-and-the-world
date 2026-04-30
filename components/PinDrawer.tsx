@@ -161,7 +161,10 @@ function PinDrawerBody({
 
   return (
     <div className="overflow-y-auto px-6 pb-8 pt-4">
-      <Drawer.Title className="font-display italic text-[28px] font-normal leading-tight text-ink">
+      <Drawer.Title
+        data-pin-title
+        className="font-display italic text-[28px] font-normal leading-tight text-ink"
+      >
         {pin.title}
       </Drawer.Title>
       {pin.note && (
@@ -412,7 +415,10 @@ function DayGroupCard({
           <div className="text-[11px] uppercase tracking-wider text-ink-soft">
             {ordinalTimeLabel(ordinal).toUpperCase()}
           </div>
-          <div className="font-display italic text-[16px] leading-tight text-ink">
+          <div
+            data-visit-date
+            className="font-display italic text-[16px] leading-tight text-ink"
+          >
             {formatLongDate(visits[0].visited_at)}
           </div>
         </div>

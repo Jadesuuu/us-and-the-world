@@ -4,6 +4,8 @@ import "./globals.css";
 import { Providers } from "./providers";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import GalaxyStars from "@/components/GalaxyStars";
+import PaperTexture from "@/components/PaperTexture";
+import AtmosphericLayer from "@/components/AtmosphericLayer";
 import { Toaster } from "sonner";
 
 const fraunces = Fraunces({
@@ -70,7 +72,9 @@ export default function RootLayout({
       </head>
       <body className="h-full flex flex-col">
         <ThemeProvider>
+          <AtmosphericLayer />
           <GalaxyStars />
+          <PaperTexture />
           <Providers>
             {children}
             <Toaster

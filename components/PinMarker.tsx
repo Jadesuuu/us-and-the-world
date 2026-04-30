@@ -58,6 +58,7 @@ export default function PinMarker({
           style={{ display: "block" }}
         >
           <path
+            className="pin-marker-shape"
             d="M10 27.5
                C 10 27.5, 0.5 16.7, 0.5 9.7
                C 0.5 4.3, 4.7 0.5, 10 0.5

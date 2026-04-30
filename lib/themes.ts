@@ -1,12 +1,38 @@
 export type ThemeId = "dream" | "night" | "galaxy" | "paper";
 export type ThemePreference = ThemeId | "auto";
 
+export interface ThemeMapPaint {
+  water: string;
+  waterOpacity?: number; // applied as fill-opacity if set
+  land: string;
+  roads?: {
+    color: string;
+    opacity: number;
+    lineWidthScale?: number; // multiplies the style's existing line-width
+  };
+  buildings?: { color: string; opacity: number };
+  hideLayers?: string[]; // layer ids to set visibility: none
+  recolorLabels?: Array<{
+    layerId: string;
+    textColor: string;
+    opacity?: number;
+  }>;
+}
+
+export interface ThemePinFill {
+  visited: string;
+  override?: string;
+}
+
 export interface Theme {
   id: ThemeId;
   name: string;
   description: string;
-  swatches: [string, string, string, string, string]; // bg, surface, pin-jade, pin-frances, accent
+  personality: string;
+  swatches: [string, string, string, string, string];
   mapStyle: string;
+  mapPaint: ThemeMapPaint;
+  pinFill: ThemePinFill;
   vars: {
     bg: string;
     surface: string;
@@ -20,13 +46,42 @@ export interface Theme {
   };
 }
 
+// Common Mapbox label layer ids used across light-v11 / dark-v11. Some
+// of these may not exist in every style version; setLayoutProperty
+// guards on getLayer() so missing ids are safely ignored.
+const ROAD_LABEL_LAYERS = [
+  "road-label",
+  "road-label-simple",
+  "road-label-navigation",
+  "road-number-shield",
+  "road-exit-shield",
+];
+const POI_LABEL_LAYERS = [
+  "poi-label",
+  "natural-line-label",
+  "natural-point-label",
+  "water-line-label",
+  "water-point-label",
+];
+const MINOR_PLACE_LABELS = [
+  "settlement-minor-label",
+  "settlement-subdivision-label",
+];
+
 export const themes: Theme[] = [
   {
     id: "dream",
     name: "Dream",
     description: "cream, terracotta, sage",
+    personality: "Tuesday afternoon, golden light",
     swatches: ["#F7F1E8", "#E8D9B8", "#4A7AB0", "#D88578", "#C8553D"],
     mapStyle: "mapbox://styles/mapbox/light-v11",
+    mapPaint: {
+      water: "#5C7A6F",
+      land: "#F7F1E8",
+      buildings: { color: "#E8D9B8", opacity: 0.7 },
+    },
+    pinFill: { visited: "var(--ink)" },
     vars: {
       bg: "#F7F1E8",
       surface: "#E8D9B8",
@@ -43,8 +98,15 @@ export const themes: Theme[] = [
     id: "night",
     name: "Night",
     description: "midnight blue, sunset peach",
+    personality: "After dinner, before sleep",
     swatches: ["#0F1729", "#1F2A44", "#7BA4D0", "#E89BAB", "#F4955C"],
     mapStyle: "mapbox://styles/mapbox/dark-v11",
+    mapPaint: {
+      water: "#76B0A4",
+      land: "#0F1729",
+      buildings: { color: "#9BABCB", opacity: 0.35 },
+    },
+    pinFill: { visited: "var(--ink)" },
     vars: {
       bg: "#0F1729",
       surface: "#1F2A44",
@@ -60,37 +122,82 @@ export const themes: Theme[] = [
   {
     id: "galaxy",
     name: "Galaxy",
-    description: "cosmic indigo, deep ocean, lavender",
-    swatches: ["#0E0B26", "#1E1A45", "#7BA8E0", "#C5A8FF", "#B89AFF"],
+    description: "Earth at night. Quiet awe.",
+    personality: "From orbit, looking down",
+    swatches: ["#050B1F", "#0A1530", "#5BC0E8", "#FF9D5C", "#E8EEF7"],
     mapStyle: "mapbox://styles/mapbox/dark-v11",
+    mapPaint: {
+      water: "#050B1F",
+      // Continents barely visible — nearly the same as bg so only
+      // outlines hint at land. Tweaked from #0E1A38 → #0A1426.
+      land: "#0A1426",
+      roads: {
+        color: "#FF9D5C",
+        opacity: 0.3,
+        lineWidthScale: 0.5, // halved — roads as faint sodium-light grid
+      },
+      buildings: { color: "#8FA0BC", opacity: 0.2 },
+      hideLayers: [
+        ...ROAD_LABEL_LAYERS,
+        ...POI_LABEL_LAYERS,
+        ...MINOR_PLACE_LABELS,
+      ],
+      recolorLabels: [
+        { layerId: "country-label", textColor: "#E8EEF7", opacity: 0.3 },
+        // Major cities: warm amber dots, the only "bright" labels left.
+        { layerId: "settlement-major-label", textColor: "#FF9D5C", opacity: 0.55 },
+      ],
+    },
+    pinFill: { visited: "var(--ink)" },
     vars: {
-      bg: "#0E0B26",
-      surface: "#1E1A45",
-      ink: "#E8DDFF",
-      "ink-soft": "#9D93C4",
-      accent: "#B89AFF",
-      "accent-2": "#3D5A80",
-      "pin-jade": "#7BA8E0",
-      "pin-frances": "#C5A8FF",
-      border: "rgba(232, 221, 255, 0.10)",
+      bg: "#050B1F",
+      surface: "#0A1530",
+      ink: "#E8EEF7",
+      "ink-soft": "#8FA0BC",
+      accent: "#FF9D5C",
+      "accent-2": "#5BC0E8",
+      "pin-jade": "#5BC0E8",
+      "pin-frances": "#FF9D5C",
+      border: "rgba(232, 238, 247, 0.08)",
     },
   },
   {
     id: "paper",
     name: "Paper",
-    description: "bone white, walnut, forest",
-    swatches: ["#FAF7F0", "#ECE5D5", "#3A5C7F", "#B07A65", "#8B5A3C"],
+    description: "A field notebook. Inked and kept.",
+    personality: "An archive of where we've been",
+    swatches: ["#F2EBD8", "#E5DAB8", "#A83D2D", "#4A5840", "#2B2317"],
     mapStyle: "mapbox://styles/mapbox/light-v11",
+    mapPaint: {
+      water: "#B8C4A8",
+      waterOpacity: 0.85, // hand-painted feel, lets grain peek through
+      // Slightly darker than --bg (#F2EBD8) so water and land have
+      // visible contrast on the map.
+      land: "#ECE2C5",
+      roads: {
+        color: "#6B5D43",
+        opacity: 0.5,
+        lineWidthScale: 1.5, // thicker — old topo-map inked roads
+      },
+      buildings: { color: "#6B5D43", opacity: 0.4 },
+      hideLayers: [...POI_LABEL_LAYERS, ...MINOR_PLACE_LABELS],
+      recolorLabels: [
+        { layerId: "country-label", textColor: "#2B2317", opacity: 0.6 },
+        { layerId: "state-label", textColor: "#2B2317", opacity: 0.6 },
+        { layerId: "settlement-major-label", textColor: "#2B2317", opacity: 0.7 },
+      ],
+    },
+    pinFill: { visited: "var(--accent-2)", override: "var(--accent)" },
     vars: {
-      bg: "#FAF7F0",
-      surface: "#ECE5D5",
-      ink: "#2E2A24",
-      "ink-soft": "#5C5448",
-      accent: "#8B5A3C",
-      "accent-2": "#4A6B5E",
-      "pin-jade": "#3A5C7F",
-      "pin-frances": "#B07A65",
-      border: "rgba(46, 42, 36, 0.12)",
+      bg: "#F2EBD8",
+      surface: "#E5DAB8",
+      ink: "#2B2317",
+      "ink-soft": "#6B5D43",
+      accent: "#A83D2D",
+      "accent-2": "#4A5840",
+      "pin-jade": "#A83D2D",
+      "pin-frances": "#A83D2D",
+      border: "rgba(43, 35, 23, 0.18)",
     },
   },
 ];

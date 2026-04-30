@@ -12,8 +12,62 @@ function mulberry32(seed: number) {
   };
 }
 
-const NEAR_STARS = (() => {
-  const rng = mulberry32(0x4a464657); // "JFFW"
+interface StarSpec {
+  cx: number;
+  cy: number;
+  r: number;
+  fill: string;
+  opacity: number;
+  bright: boolean;
+}
+
+// Galaxy: 120 stars across three brightness/size tiers. Opacities
+// roughly doubled vs the original spec because these now render
+// ABOVE the map, not behind it — the map's own contrast eats stars
+// quickly otherwise.
+const GALAXY_STARS: StarSpec[] = (() => {
+  const rng = mulberry32(0x4a464657);
+  const out: StarSpec[] = [];
+  for (let i = 0; i < 120; i++) {
+    const sizeRoll = rng();
+    let r: number;
+    let bright = false;
+    if (sizeRoll < 0.7) {
+      r = 0.6 + rng() * 0.4; // background dust
+    } else if (sizeRoll < 0.95) {
+      r = 1.0 + rng() * 0.8; // mid stars
+    } else {
+      r = 2.0 + rng() * 0.8; // foreground bright
+      bright = true;
+    }
+    const warm = rng() < 0.1;
+    // Calibrated for visibility above the map:
+    //   background dust: 8–14%
+    //   mid stars:       12–18%
+    //   bright:          22–32%
+    let opacity: number;
+    if (sizeRoll < 0.7) {
+      opacity = 0.08 + rng() * 0.06;
+    } else if (sizeRoll < 0.95) {
+      opacity = 0.12 + rng() * 0.06;
+    } else {
+      opacity = 0.22 + rng() * 0.1;
+    }
+    if (warm) opacity = Math.min(0.4, opacity + 0.04);
+    out.push({
+      cx: Number((rng() * 100).toFixed(2)),
+      cy: Number((rng() * 100).toFixed(2)),
+      r: Number(r.toFixed(2)),
+      fill: warm ? "#FFCBA0" : "#FFFFFF",
+      opacity: Number(opacity.toFixed(3)),
+      bright,
+    });
+  }
+  return out;
+})();
+
+const NIGHT_STARS = (() => {
+  const rng = mulberry32(0x4a464657);
   return Array.from({ length: 80 }, () => ({
     cx: Number((rng() * 100).toFixed(2)),
     cy: Number((rng() * 100).toFixed(2)),
@@ -21,9 +75,8 @@ const NEAR_STARS = (() => {
   }));
 })();
 
-// Sparser, larger. Used only for Galaxy + 3D mode for parallax depth.
 const DEEP_STARS = (() => {
-  const rng = mulberry32(0x44535453); // "DSTS"
+  const rng = mulberry32(0x44535453);
   return Array.from({ length: 20 }, () => ({
     cx: Number((rng() * 100).toFixed(2)),
     cy: Number((rng() * 100).toFixed(2)),
@@ -37,60 +90,88 @@ const FIXED_LAYER_STYLE: React.CSSProperties = {
   width: "100vw",
   height: "100vh",
   pointerEvents: "none",
-  zIndex: -1,
+  zIndex: 5, // above Mapbox canvas (0/1), below UI chrome (30+)
 };
 
 export default function GalaxyStars() {
   const { resolvedTheme } = useTheme();
   if (resolvedTheme !== "galaxy" && resolvedTheme !== "night") return null;
 
-  // Slightly subtler in Night so they read as "a clear sky" not "deep space".
-  const nearOpacity = resolvedTheme === "galaxy" ? 0.06 : 0.05;
-  const isGalaxy = resolvedTheme === "galaxy";
-
-  return (
-    <>
+  if (resolvedTheme === "night") {
+    return (
       <svg
         aria-hidden="true"
         viewBox="0 0 100 100"
         preserveAspectRatio="xMidYMid slice"
         style={FIXED_LAYER_STYLE}
       >
-        {NEAR_STARS.map((s, i) => (
+        {NIGHT_STARS.map((s, i) => (
           <circle
             key={i}
             cx={s.cx}
             cy={s.cy}
             r={s.r}
             fill="#ffffff"
-            opacity={nearOpacity}
+            // Bumped from 0.05 to 0.10 since this layer is now above
+            // the dark-v11 map instead of behind it.
+            opacity={0.1}
+          />
+        ))}
+      </svg>
+    );
+  }
+
+  // Galaxy. The fadein class runs once on mount; if the user toggles
+  // away and back, it replays — acceptable since theme switching is
+  // a deliberate gesture and the animation is gentle.
+  return (
+    <>
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 100 100"
+        preserveAspectRatio="xMidYMid slice"
+        className="galaxy-stars-fadein"
+        style={FIXED_LAYER_STYLE}
+      >
+        {GALAXY_STARS.map((s, i) => (
+          <circle
+            key={i}
+            cx={s.cx}
+            cy={s.cy}
+            r={s.r}
+            fill={s.fill}
+            opacity={s.opacity}
+            // Bumped drop-shadow blur from 2 → 3 so foreground stars
+            // glow more legibly above the map.
+            style={
+              s.bright
+                ? {
+                    filter: `drop-shadow(0 0 3px ${s.fill})`,
+                  }
+                : undefined
+            }
           />
         ))}
       </svg>
 
-      {isGalaxy && (
-        // Deep parallax layer. Visibility and rotation are controlled
-        // by CSS based on the document's data-map-mode attribute and
-        // the --bearing custom property, both set by Map.tsx.
-        <svg
-          aria-hidden="true"
-          className="galaxy-stars-deep"
-          viewBox="0 0 100 100"
-          preserveAspectRatio="xMidYMid slice"
-          style={FIXED_LAYER_STYLE}
-        >
-          {DEEP_STARS.map((s, i) => (
-            <circle
-              key={i}
-              cx={s.cx}
-              cy={s.cy}
-              r={s.r}
-              fill="#ffffff"
-              opacity={0.08}
-            />
-          ))}
-        </svg>
-      )}
+      <svg
+        aria-hidden="true"
+        className="galaxy-stars-deep"
+        viewBox="0 0 100 100"
+        preserveAspectRatio="xMidYMid slice"
+        style={FIXED_LAYER_STYLE}
+      >
+        {DEEP_STARS.map((s, i) => (
+          <circle
+            key={i}
+            cx={s.cx}
+            cy={s.cy}
+            r={s.r}
+            fill="#ffffff"
+            opacity={0.12}
+          />
+        ))}
+      </svg>
     </>
   );
 }

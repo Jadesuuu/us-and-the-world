@@ -32,27 +32,27 @@
 }
 
 [data-theme="galaxy"] {
-  --bg: #0e0b26;
-  --surface: #1e1a45;
-  --ink: #e8ddff;
-  --ink-soft: #9d93c4;
-  --accent: #b89aff;
-  --accent-2: #3d5a80;
-  --pin-jade: #7ba8e0;
-  --pin-frances: #c5a8ff;
-  --border: rgba(232, 221, 255, 0.10);
+  --bg: #050b1f;
+  --surface: #0a1530;
+  --ink: #e8eef7;
+  --ink-soft: #8fa0bc;
+  --accent: #ff9d5c;
+  --accent-2: #5bc0e8;
+  --pin-jade: #5bc0e8;
+  --pin-frances: #ff9d5c;
+  --border: rgba(232, 238, 247, 0.08);
 }
 
 [data-theme="paper"] {
-  --bg: #faf7f0;
-  --surface: #ece5d5;
-  --ink: #2e2a24;
-  --ink-soft: #5c5448;
-  --accent: #8b5a3c;
-  --accent-2: #4a6b5e;
-  --pin-jade: #3a5c7f;
-  --pin-frances: #b07a65;
-  --border: rgba(46, 42, 36, 0.12);
+  --bg: #f2ebd8;
+  --surface: #e5dab8;
+  --ink: #2b2317;
+  --ink-soft: #6b5d43;
+  --accent: #a83d2d;
+  --accent-2: #4a5840;
+  --pin-jade: #a83d2d;
+  --pin-frances: #a83d2d;
+  --border: rgba(43, 35, 23, 0.18);
 }
 
 /* ------------------------------------------------------------------
@@ -168,4 +168,112 @@
     transition: opacity 0ms;
     transform: none;
   }
+}
+
+/* ------------------------------------------------------------------
+   Galaxy: stars fade in once on mount over 1.2s. animation-fill-mode
+   forwards so the final state holds and there's no flicker on
+   subsequent renders.
+   ------------------------------------------------------------------ */
+
+@keyframes galaxy-stars-fadein {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.galaxy-stars-fadein {
+  animation: galaxy-stars-fadein 1.2s ease-out;
+  animation-fill-mode: forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .galaxy-stars-fadein {
+    animation: none;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Paper: a single 300ms cream-white flutter when entering the theme.
+   Uses ::after on body so it doesn't disturb the rest of the layout.
+   ------------------------------------------------------------------ */
+
+@keyframes paper-page-turn {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+body.paper-page-turn::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-color: #f5ebd7;
+  pointer-events: none;
+  z-index: 60;
+  animation: paper-page-turn 300ms ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.paper-page-turn::after {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------
+   Z-index hierarchy used across the app:
+       0   Mapbox canvas
+       1   Mapbox internal controls / canvas overlays
+       5   Atmospheric layers (stars, grain, glow, vignette)
+      10   Pin markers (forced via .mapboxgl-marker rule below)
+      30   UI chrome — search bar, settings button, BottomNav
+      50   Vaul drawers / modals
+   1e4+   Sonner toasts (default)
+   ------------------------------------------------------------------ */
+
+/* Lift Mapbox HTML markers above the z-5 atmospheric overlay so the
+   teardrops paint on top of stars/grain. Mapbox sets transform on the
+   marker which creates a stacking context — z-index here participates
+   at the root because the map container doesn't establish one. */
+.mapboxgl-marker {
+  z-index: 10;
+}
+
+/* ------------------------------------------------------------------
+   Paper-specific typography. Old-style numerals and a librarian's
+   underline on the pin title in the drawer header (only when the
+   element carries data-pin-title — keeps the timeline rows clean).
+   ------------------------------------------------------------------ */
+
+body[data-theme="paper"] {
+  font-feature-settings: "onum" 1;
+}
+
+body[data-theme="paper"] [data-pin-title] {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--ink-soft);
+  text-underline-offset: 4px;
+}
+
+/* Visit dates render as ledger entries — thin rules above and below. */
+body[data-theme="paper"] [data-visit-date] {
+  border-top: 0.5px solid var(--ink-soft);
+  border-bottom: 0.5px solid var(--ink-soft);
+  padding: 2px 0;
+}
+
+/* Pin marker inner stroke: ink bleed on paper. The stroke is applied
+   to the teardrop path via this class; opacity comes from
+   stroke-opacity so it doesn't compose with the path's fill opacity. */
+body[data-theme="paper"] .pin-marker-shape {
+  stroke: var(--ink);
+  stroke-width: 0.5;
+  stroke-opacity: 0.3;
 }

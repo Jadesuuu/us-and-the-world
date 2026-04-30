@@ -16,13 +16,31 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import { usePins, type Pin } from "@/hooks/usePins";
 import { useProfiles, type Profile } from "@/hooks/useProfiles";
 import { useTheme } from "./ThemeProvider";
-import { themesById } from "@/lib/themes";
+import { themesById, type Theme } from "@/lib/themes";
 import {
   CAMERA_PROFILES,
   PIN_SWITCH_DURATION_MS,
   RETURN_TO_FLAT,
 } from "@/lib/map-cameras";
 import PinMarker, { rotationFromId } from "./PinMarker";
+
+// Layer ids that exist in mapbox/light-v11 and dark-v11 for road
+// styling. Setting paint on a layer that doesn't exist is a no-op
+// once we guard with getLayer() — listing common ones covers both.
+const ROAD_LAYER_IDS = [
+  "road-trunk",
+  "road-primary",
+  "road-secondary-tertiary",
+  "road-street",
+  "road-street-low",
+  "road-minor",
+  "road-major-link",
+  "road-minor-link",
+  "road-trunk-link",
+  "road-primary-link",
+  "road-secondary-link",
+];
+
 
 const FALLBACK_VIEW = { latitude: 20, longitude: 0, zoom: 1.5 };
 
@@ -45,36 +63,73 @@ interface Props {
 // Helpers
 // ============================================================
 
-function readVar(name: string): string {
-  return getComputedStyle(document.documentElement)
-    .getPropertyValue(name)
-    .trim();
-}
-
-function applyPaintOverrides(map: mapboxgl.Map) {
-  const accent2 = readVar("--accent-2");
-  const bg = readVar("--bg");
-  if (!accent2 || !bg) return;
+function applyPaintOverrides(map: mapboxgl.Map, theme: Theme) {
+  const { mapPaint } = theme;
 
   if (map.getLayer("water")) {
-    map.setPaintProperty("water", "fill-color", accent2);
+    map.setPaintProperty("water", "fill-color", mapPaint.water);
+    if (mapPaint.waterOpacity != null) {
+      map.setPaintProperty("water", "fill-opacity", mapPaint.waterOpacity);
+    }
   }
   for (const layer of ["land", "background"]) {
     const def = map.getLayer(layer);
     if (!def) continue;
     const prop =
       def.type === "background" ? "background-color" : "fill-color";
-    map.setPaintProperty(layer, prop, bg);
+    map.setPaintProperty(layer, prop, mapPaint.land);
+  }
+
+  if (mapPaint.roads) {
+    const { color, opacity, lineWidthScale } = mapPaint.roads;
+    for (const layer of ROAD_LAYER_IDS) {
+      if (!map.getLayer(layer)) continue;
+      map.setPaintProperty(layer, "line-color", color);
+      map.setPaintProperty(layer, "line-opacity", opacity);
+      if (lineWidthScale != null) {
+        // Read current width and multiply. Mapbox returns the underlying
+        // expression (or constant); wrapping with ['*', expr, scale]
+        // keeps zoom-based scaling intact.
+        const current = map.getPaintProperty(layer, "line-width");
+        if (current != null) {
+          map.setPaintProperty(layer, "line-width", [
+            "*",
+            current,
+            lineWidthScale,
+          ] as unknown as mapboxgl.Expression);
+        }
+      }
+    }
+  }
+
+  if (mapPaint.hideLayers) {
+    for (const layerId of mapPaint.hideLayers) {
+      if (!map.getLayer(layerId)) continue;
+      map.setLayoutProperty(layerId, "visibility", "none");
+    }
+  }
+
+  if (mapPaint.recolorLabels) {
+    for (const rule of mapPaint.recolorLabels) {
+      if (!map.getLayer(rule.layerId)) continue;
+      map.setPaintProperty(rule.layerId, "text-color", rule.textColor);
+      if (rule.opacity != null) {
+        map.setPaintProperty(rule.layerId, "text-opacity", rule.opacity);
+      }
+    }
   }
 }
 
 const BUILDINGS_LAYER_ID = "jf-3d-buildings";
 
-function add3DBuildings(map: mapboxgl.Map) {
-  // Mapbox doesn't accept CSS variable strings in paint; resolve them.
-  const surface = readVar("--surface");
-  const accent2 = readVar("--accent-2");
-  if (!surface || !accent2) return;
+function add3DBuildings(map: mapboxgl.Map, theme: Theme) {
+  const buildings = theme.mapPaint.buildings;
+  if (!buildings) {
+    if (map.getLayer(BUILDINGS_LAYER_ID)) {
+      map.removeLayer(BUILDINGS_LAYER_ID);
+    }
+    return;
+  }
 
   // composite source / building layer aren't always present (custom styles).
   if (!map.getSource("composite")) return;
@@ -91,15 +146,7 @@ function add3DBuildings(map: mapboxgl.Map) {
     type: "fill-extrusion",
     minzoom: 14,
     paint: {
-      "fill-extrusion-color": [
-        "interpolate",
-        ["linear"],
-        ["get", "height"],
-        0,
-        surface,
-        100,
-        accent2,
-      ],
+      "fill-extrusion-color": buildings.color,
       "fill-extrusion-height": [
         "interpolate",
         ["linear"],
@@ -110,7 +157,7 @@ function add3DBuildings(map: mapboxgl.Map) {
         ["get", "height"],
       ],
       "fill-extrusion-base": ["get", "min_height"],
-      "fill-extrusion-opacity": 0.85,
+      "fill-extrusion-opacity": buildings.opacity,
     },
   });
 }
@@ -127,9 +174,9 @@ function addTerrain(map: mapboxgl.Map) {
   map.setTerrain({ source: "mapbox-dem", exaggeration: 1.2 });
 }
 
-function applyEnhancements(map: mapboxgl.Map) {
-  applyPaintOverrides(map);
-  add3DBuildings(map);
+function applyEnhancements(map: mapboxgl.Map, theme: Theme) {
+  applyPaintOverrides(map, theme);
+  add3DBuildings(map, theme);
   addTerrain(map);
 }
 
@@ -141,12 +188,14 @@ function reducedMotion(): boolean {
 function pinFillForTheme(
   pin: Pin,
   profilesByUser: Record<string, Profile>,
+  theme: Theme,
 ): string {
-  // Visited pins use --ink — the theme's foreground color — so they
-  // read as a "marked off" stamp at maximum contrast against the bg
-  // in every theme. Creator distinction is dropped once visited; the
-  // memory takes precedence over who pinned it.
-  if (pin.has_visits) return "var(--ink)";
+  // theme.pinFill.visited wins for any visited pin.
+  if (pin.has_visits) return theme.pinFill.visited;
+  // theme.pinFill.override (Paper only) skips creator distinction
+  // entirely — every unvisited pin uses the same color.
+  if (theme.pinFill.override) return theme.pinFill.override;
+  // Default behavior: per-creator hue.
   if (!pin.created_by) return "var(--accent)";
   const profile = profilesByUser[pin.created_by];
   if (!profile) return "var(--accent)";
@@ -253,7 +302,7 @@ const Map = forwardRef<MapHandle, Props>(function Map(
 
     // setStyle() wipes the buildings layer, terrain, and paint overrides —
     // reapply them all once the new style finishes loading.
-    const onceLoaded = () => applyEnhancements(map);
+    const onceLoaded = () => applyEnhancements(map, themesById[resolvedTheme]);
     map.once("style.load", onceLoaded);
     return () => {
       map.off("style.load", onceLoaded);
@@ -453,7 +502,7 @@ const Map = forwardRef<MapHandle, Props>(function Map(
         mapStyle={mapStyle}
         style={{ width: "100%", height: "100%" }}
         maxPitch={85}
-        onLoad={(e) => applyEnhancements(e.target)}
+        onLoad={(e) => applyEnhancements(e.target, themesById[resolvedTheme])}
         onClick={(e) => {
           if (!onMapClick) return;
           onMapClick({ lat: e.lngLat.lat, lng: e.lngLat.lng });
@@ -472,7 +521,11 @@ const Map = forwardRef<MapHandle, Props>(function Map(
               }}
             >
               <PinMarker
-                fill={pinFillForTheme(pin, profilesByUser)}
+                fill={pinFillForTheme(
+                  pin,
+                  profilesByUser,
+                  themesById[resolvedTheme],
+                )}
                 rotation={rotationFromId(pin.id)}
                 animate={pin.id === recentlyAddedId}
                 visitDayCount={pin.visit_day_count}

@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -56,6 +57,25 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", resolvedTheme);
+  }, [resolvedTheme]);
+
+  // Page-turn flutter when entering Paper. A 300ms cream-white overlay
+  // fades out via CSS animation. Skipped under reduced-motion.
+  const previousResolvedRef = useRef<ThemeId | null>(null);
+  useEffect(() => {
+    const previous = previousResolvedRef.current;
+    previousResolvedRef.current = resolvedTheme;
+    if (previous === null) return; // first mount, no flutter
+    if (previous === resolvedTheme) return;
+    if (resolvedTheme !== "paper") return;
+    document.body.classList.add("paper-page-turn");
+    const t = window.setTimeout(() => {
+      document.body.classList.remove("paper-page-turn");
+    }, 320);
+    return () => {
+      window.clearTimeout(t);
+      document.body.classList.remove("paper-page-turn");
+    };
   }, [resolvedTheme]);
 
   const setTheme = useCallback((t: ThemePreference) => {
