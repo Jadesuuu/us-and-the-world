@@ -18,6 +18,13 @@ export interface PlaceReview {
   timeDescription: string;
 }
 
+export interface PlacePhoto {
+  ref: string;
+  // Google's authorAttributions[0].displayName when present — shown
+  // in the lightbox caption ("Photo by Carlos E.").
+  attribution?: string;
+}
+
 export interface ResolvedPlace {
   name: string;
   address: string;
@@ -25,7 +32,7 @@ export interface ResolvedPlace {
   lng: number;
   rating: number | null;
   userRatingCount: number | null;
-  photoRefs: string[];
+  photos: PlacePhoto[];
   reviews: PlaceReview[];
 }
 
@@ -138,18 +145,33 @@ export default function SearchControl({
     };
   }, [query]);
 
-  function extractPhotoRef(photo: google.maps.places.Photo): string | null {
+  function extractPlacePhoto(
+    photo: google.maps.places.Photo,
+  ): PlacePhoto | null {
+    let ref: string | null = null;
     const directName = (photo as unknown as { name?: string }).name;
     if (typeof directName === "string" && directName.length > 0) {
-      return directName.startsWith("places/") ? directName : null;
+      ref = directName.startsWith("places/") ? directName : null;
+    } else {
+      try {
+        const uri = photo.getURI({ maxWidth: 400 });
+        const m = uri.match(/places\/[A-Za-z0-9_-]+\/photos\/[A-Za-z0-9_-]+/);
+        ref = m?.[0] ?? null;
+      } catch {
+        ref = null;
+      }
     }
-    try {
-      const uri = photo.getURI({ maxWidth: 400 });
-      const m = uri.match(/places\/[A-Za-z0-9_-]+\/photos\/[A-Za-z0-9_-]+/);
-      return m?.[0] ?? null;
-    } catch {
-      return null;
-    }
+    if (!ref) return null;
+
+    // Google's PhotoAuthorAttribution shape; first author wins.
+    const attributions = (photo as unknown as {
+      authorAttributions?: { displayName?: string }[];
+    }).authorAttributions;
+    const attribution = attributions?.find(
+      (a) => typeof a.displayName === "string" && a.displayName.length > 0,
+    )?.displayName;
+
+    return { ref, attribution };
   }
 
   async function handleSelect(suggestion: Suggestion) {
@@ -178,9 +200,9 @@ export default function SearchControl({
       const lng =
         typeof place.location?.lng === "function" ? place.location.lng() : 0;
 
-      const photoRefs = (place.photos ?? [])
-        .map(extractPhotoRef)
-        .filter((r): r is string => r != null);
+      const photos = (place.photos ?? [])
+        .map(extractPlacePhoto)
+        .filter((p): p is PlacePhoto => p != null);
 
       const reviews: PlaceReview[] = (place.reviews ?? [])
         .slice(0, 5)
@@ -201,7 +223,7 @@ export default function SearchControl({
           typeof place.userRatingCount === "number"
             ? place.userRatingCount
             : null,
-        photoRefs,
+        photos,
         reviews,
       });
 

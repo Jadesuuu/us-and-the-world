@@ -146,30 +146,6 @@
 }
 
 /* ------------------------------------------------------------------
-   ImageLightbox: gentle fade-in. Reduced-motion users get an instant
-   appearance via the media query below.
-   ------------------------------------------------------------------ */
-
-@keyframes image-lightbox-fadein {
-  0% {
-    opacity: 0;
-  }
-  100% {
-    opacity: 1;
-  }
-}
-
-.image-lightbox-fadein {
-  animation: image-lightbox-fadein 200ms ease-out;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .image-lightbox-fadein {
-    animation: none;
-  }
-}
-
-/* ------------------------------------------------------------------
    Paper: a single 300ms cream-white flutter when entering the theme.
    Uses ::after on body so it doesn't disturb the rest of the layout.
    ------------------------------------------------------------------ */
@@ -223,6 +199,31 @@ body.paper-page-turn::after {
    at the root because the map container doesn't establish one. */
 .mapboxgl-marker {
   z-index: 10;
+}
+
+/* ------------------------------------------------------------------
+   Sidebar scrollable region — thin themed scrollbar in place of the
+   chunky default. Applied via .sidebar-scroll on the scroll
+   container in each panel.
+   ------------------------------------------------------------------ */
+
+.sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.sidebar-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-soft);
 }
 
 /* ------------------------------------------------------------------

@@ -12,6 +12,11 @@ import type { VisitPhoto } from "@/hooks/usePinVisits";
 import { formatLongDate } from "@/lib/format";
 import type { ResolvedPlace } from "@/components/SearchControl";
 import type { LatLng } from "@/components/Map";
+import {
+  useScrollShadows,
+  SCROLL_SHADOW_TOP,
+  SCROLL_SHADOW_BOTTOM,
+} from "@/lib/use-scroll-shadows";
 
 type SidebarTab = "dreaming" | "lived";
 type SidebarMode = "list" | "detail" | "add" | "preview";
@@ -64,7 +69,7 @@ export default function DesktopSidebar(props: Props) {
 
   return (
     <aside
-      className="flex h-full w-[380px] shrink-0 flex-col bg-surface"
+      className="flex h-full w-[380px] shrink-0 flex-col overflow-hidden bg-surface"
       style={{ borderRight: "0.5px solid var(--border)" }}
     >
       {mode === "list" && (
@@ -79,6 +84,7 @@ export default function DesktopSidebar(props: Props) {
       {mode === "detail" && selectedPin && (
         <PanelMode label="all pins" onBack={onCloseDetail}>
           <PinContent
+            layout="panel"
             pin={selectedPin}
             readOnly={false}
             onClose={onCloseDetail}
@@ -104,7 +110,7 @@ export default function DesktopSidebar(props: Props) {
           <PreviewBody
             place={previewPlace}
             onDropDream={onDropDreamFromPreview}
-            titleAs="panel"
+            layout="panel"
           />
         </PanelMode>
       )}
@@ -127,19 +133,42 @@ function ListMode({
   onSelectPin: (pinId: string) => void;
   onOpenAdd: () => void;
 }) {
+  const { topSentinelRef, bottomSentinelRef, topShadow, bottomShadow } =
+    useScrollShadows();
+
   return (
     <>
-      <TabStrip tab={tab} onChange={onTabChange} />
-      <div className="flex-1 overflow-y-auto">
+      <div
+        className="shrink-0 bg-surface"
+        style={{
+          boxShadow: topShadow ? SCROLL_SHADOW_TOP : "none",
+          transition: "box-shadow 200ms ease-out",
+          zIndex: 1,
+        }}
+      >
+        <TabStrip tab={tab} onChange={onTabChange} />
+      </div>
+
+      <div
+        className="sidebar-scroll flex-1 overflow-y-auto"
+        style={{ minHeight: 0 }}
+      >
+        <div ref={topSentinelRef} style={{ height: 1 }} />
         {tab === "dreaming" ? (
           <DreamingList onSelectPin={onSelectPin} />
         ) : (
           <LivedList onSelectPin={onSelectPin} />
         )}
+        <div ref={bottomSentinelRef} style={{ height: 1 }} />
       </div>
+
       <div
-        className="shrink-0 p-4"
-        style={{ borderTop: "0.5px solid var(--border)" }}
+        className="shrink-0 bg-surface p-4"
+        style={{
+          borderTop: "0.5px solid var(--border)",
+          boxShadow: bottomShadow ? SCROLL_SHADOW_BOTTOM : "none",
+          transition: "box-shadow 200ms ease-out",
+        }}
       >
         <button
           type="button"
@@ -212,6 +241,12 @@ function TabButton({
 // Panel mode — back arrow + body
 // ============================================================
 
+// PanelMode is just a back-button strip + a flex-column body slot.
+// It deliberately does NOT scroll — each consumer is responsible for
+// rendering its own scrollable region + sticky footer inside the body
+// slot. That avoids nested overflow:auto (which steals the wheel
+// event from the actual scrollable region) and lets the body component
+// own its own header/footer split.
 function PanelMode({
   label,
   onBack,
@@ -224,7 +259,7 @@ function PanelMode({
   return (
     <>
       <div
-        className="shrink-0 px-4 py-3"
+        className="shrink-0 bg-surface px-4 py-3"
         style={{ borderBottom: "0.5px solid var(--border)" }}
       >
         <button
@@ -236,7 +271,12 @@ function PanelMode({
           <span>{label}</span>
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto">{children}</div>
+      <div
+        className="flex flex-1 flex-col"
+        style={{ minHeight: 0 }}
+      >
+        {children}
+      </div>
     </>
   );
 }
@@ -372,7 +412,9 @@ function LivedList({ onSelectPin }: { onSelectPin: (id: string) => void }) {
       </ul>
 
       <ImageLightbox
-        photos={lightbox?.photos ?? []}
+        photos={(lightbox?.photos ?? []).map((p) => ({
+          url: p.image_url,
+        }))}
         initialIndex={lightbox?.index ?? 0}
         open={lightbox != null}
         onClose={() => setLightbox(null)}

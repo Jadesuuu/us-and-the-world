@@ -6,6 +6,13 @@ import { createClient } from "@/lib/supabase/server";
 // endpoint can't be turned into an open proxy for arbitrary URLs.
 const PHOTO_REF_RE = /^places\/[A-Za-z0-9_-]+\/photos\/[A-Za-z0-9_-]+$/;
 
+// Size allowlist — strip uses "thumb" (cheap), lightbox uses "full".
+// Anything else falls back to thumb.
+const SIZE_TO_HEIGHT: Record<string, number> = {
+  thumb: 400,
+  full: 1600,
+};
+
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const {
@@ -23,6 +30,9 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const sizeParam = request.nextUrl.searchParams.get("size");
+  const heightPx = SIZE_TO_HEIGHT[sizeParam ?? "thumb"] ?? SIZE_TO_HEIGHT.thumb;
+
   const apiKey = process.env.GOOGLE_PLACES_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
@@ -31,7 +41,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const upstream = `https://places.googleapis.com/v1/${ref}/media?maxHeightPx=400`;
+  const upstream = `https://places.googleapis.com/v1/${ref}/media?maxHeightPx=${heightPx}`;
   const res = await fetch(upstream, {
     headers: { "X-Goog-Api-Key": apiKey },
     redirect: "follow",

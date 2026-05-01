@@ -334,7 +334,9 @@ function MemoriesPanel({
       </div>
 
       <ImageLightbox
-        photos={lightbox?.photos ?? []}
+        photos={(lightbox?.photos ?? []).map((p) => ({
+          url: p.image_url,
+        }))}
         initialIndex={lightbox?.index ?? 0}
         open={lightbox != null}
         onClose={() => setLightbox(null)}

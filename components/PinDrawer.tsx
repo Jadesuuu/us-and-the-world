@@ -14,6 +14,11 @@ import { Toggle } from "./ui/Toggle";
 import { toast } from "sonner";
 import type { Pin } from "@/hooks/usePins";
 import ImageLightbox from "./ImageLightbox";
+import {
+  useScrollShadows,
+  SCROLL_SHADOW_TOP,
+  SCROLL_SHADOW_BOTTOM,
+} from "@/lib/use-scroll-shadows";
 
 interface Props {
   pin: Pin | null;
@@ -48,7 +53,12 @@ export default function PinDrawer({ pin, onClose, readOnly = false }: Props) {
         >
           <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-ink-soft/40" />
           {pin && (
-            <PinContent pin={pin} readOnly={readOnly} onClose={onClose} />
+            <PinContent
+              layout="drawer"
+              pin={pin}
+              readOnly={readOnly}
+              onClose={onClose}
+            />
           )}
         </Drawer.Content>
       </Drawer.Portal>
@@ -57,16 +67,23 @@ export default function PinDrawer({ pin, onClose, readOnly = false }: Props) {
 }
 
 // Body is exported so the desktop sidebar can render it directly,
-// outside any Vaul context. Title is a plain <h2 data-pin-title> rather
-// than Drawer.Title so it doesn't require a dialog ancestor.
+// outside any Vaul context.
+//
+// layout="drawer" — single overflow-y-auto column for Vaul's mobile
+//   drawer; action buttons live at the bottom of the scrollable list.
+// layout="panel"  — flex column with sticky footer for the desktop
+//   sidebar; "Log another visit" + "Delete pin" pin to the bottom of
+//   the sidebar regardless of timeline length.
 export function PinContent({
   pin,
   readOnly,
   onClose,
+  layout,
 }: {
   pin: Pin;
   readOnly: boolean;
   onClose: () => void;
+  layout: "drawer" | "panel";
 }) {
   const queryClient = useQueryClient();
   const { data: currentUser } = useCurrentUser();
@@ -177,96 +194,192 @@ export function PinContent({
     });
   }
 
-  return (
-    <div className="overflow-y-auto px-6 pb-8 pt-4">
-      <h2
-        data-pin-title
-        className="font-display italic text-[28px] font-normal leading-tight text-ink"
+  // Footer-eligible buttons: shown only when there's something to put
+  // there. The log-visit form is its own mini-form with internal
+  // Cancel/Save buttons, so we hide the panel footer while it's open.
+  const showLogAnotherVisit = !readOnly && hasVisits && !logFormOpen;
+  const showDeleteButton = isCreator;
+  const hasFooter = showLogAnotherVisit || showDeleteButton;
+
+  const title = (
+    <h2
+      data-pin-title
+      className="font-display italic text-[28px] font-normal leading-tight text-ink"
+    >
+      {pin.title}
+    </h2>
+  );
+
+  const note = pin.note ? (
+    <p className="mt-2 whitespace-pre-wrap text-[15px] text-ink-soft">
+      {pin.note}
+    </p>
+  ) : null;
+
+  const timeline = hasVisits ? (
+    <VisitTimeline
+      visits={visits}
+      currentUserId={currentUser?.id ?? null}
+      profilesByUser={profilesByUser}
+      showChips={showChips}
+      onPhotoClick={(photos, index) => setLightbox({ photos, index })}
+    />
+  ) : null;
+
+  const toggleRow =
+    !readOnly && !hasVisits ? (
+      <div
+        className="mt-6 flex items-center justify-between rounded-xl bg-bg px-4 py-3"
+        style={{ border: "1px solid var(--border)" }}
       >
-        {pin.title}
-      </h2>
-      {pin.note && (
-        <p className="mt-2 whitespace-pre-wrap text-[15px] text-ink-soft">
-          {pin.note}
-        </p>
-      )}
-
-      {hasVisits && (
-        <VisitTimeline
-          visits={visits}
-          currentUserId={currentUser?.id ?? null}
-          profilesByUser={profilesByUser}
-          showChips={showChips}
-          onPhotoClick={(photos, index) => setLightbox({ photos, index })}
+        <div className="font-display italic text-base text-ink">
+          We did it
+        </div>
+        <Toggle
+          checked={logFormOpen}
+          onChange={setLogFormOpen}
+          label="We did it"
         />
-      )}
+      </div>
+    ) : null;
 
-      {!readOnly && !hasVisits && (
+  const logForm =
+    !readOnly && logFormOpen ? (
+      <LogVisitForm
+        pinId={pin.id}
+        spaceId={pin.space_id}
+        onSaved={() => setLogFormOpen(false)}
+        onCancel={() => setLogFormOpen(false)}
+      />
+    ) : null;
+
+  const logAnotherButton = showLogAnotherVisit ? (
+    <button
+      type="button"
+      onClick={() => setLogFormOpen(true)}
+      className="h-12 w-full rounded-lg bg-accent font-display italic text-[16px] text-bg"
+    >
+      Log another visit
+    </button>
+  ) : null;
+
+  const deleteButton = showDeleteButton ? (
+    <button
+      type="button"
+      onClick={() => {
+        if (confirmingDelete) {
+          handleDeletePin();
+        } else {
+          setConfirmingDelete(true);
+        }
+      }}
+      className="h-10 w-full rounded-lg text-sm"
+      style={{
+        border: confirmingDelete
+          ? "1px solid var(--accent)"
+          : "1px solid color-mix(in srgb, var(--accent) 30%, transparent)",
+        backgroundColor: confirmingDelete
+          ? "var(--accent)"
+          : "color-mix(in srgb, var(--accent) 10%, transparent)",
+        color: confirmingDelete ? "var(--bg)" : "var(--accent)",
+      }}
+    >
+      {confirmingDelete ? "Tap again to confirm" : "Delete pin"}
+    </button>
+  ) : null;
+
+  const lightboxNode = (
+    <ImageLightbox
+      photos={(lightbox?.photos ?? []).map((p) => ({
+        url: p.image_url,
+        alt: pin.title,
+      }))}
+      initialIndex={lightbox?.index ?? 0}
+      open={lightbox != null}
+      onClose={() => setLightbox(null)}
+    />
+  );
+
+  if (layout === "drawer") {
+    // Mobile Vaul drawer: single scrolling column with action buttons
+    // at the bottom of the scroll. Same as before the refactor.
+    return (
+      <div className="overflow-y-auto px-6 pb-8 pt-4">
+        {title}
+        {note}
+        {timeline}
+        {toggleRow}
+        {logForm}
+        {logAnotherButton && (
+          <div className="mt-6">{logAnotherButton}</div>
+        )}
+        {deleteButton && <div className="mt-4">{deleteButton}</div>}
+        {lightboxNode}
+      </div>
+    );
+  }
+
+  return (
+    <PanelLayout
+      hasFooter={hasFooter}
+      footer={
+        <div className="flex flex-col gap-3">
+          {logAnotherButton}
+          {deleteButton}
+        </div>
+      }
+    >
+      <div className="px-6 pb-6 pt-4">
+        {title}
+        {note}
+        {timeline}
+        {toggleRow}
+        {logForm}
+      </div>
+      {lightboxNode}
+    </PanelLayout>
+  );
+}
+
+// Reusable scrollable + sticky-footer body for desktop sidebar panels.
+function PanelLayout({
+  children,
+  footer,
+  hasFooter,
+}: {
+  children: React.ReactNode;
+  footer: React.ReactNode;
+  hasFooter: boolean;
+}) {
+  const { topSentinelRef, bottomSentinelRef, topShadow, bottomShadow } =
+    useScrollShadows();
+
+  return (
+    <div className="flex h-full flex-col bg-surface">
+      <div
+        className="sidebar-scroll flex-1 overflow-y-auto"
+        style={{
+          minHeight: 0,
+          boxShadow: topShadow ? SCROLL_SHADOW_TOP : "none",
+          transition: "box-shadow 200ms ease-out",
+        }}
+      >
+        <div ref={topSentinelRef} style={{ height: 1 }} />
+        {children}
+        <div ref={bottomSentinelRef} style={{ height: 1 }} />
+      </div>
+      {hasFooter && (
         <div
-          className="mt-6 flex items-center justify-between rounded-xl bg-surface px-4 py-3"
-          style={{ border: "1px solid var(--border)" }}
+          className="shrink-0 bg-surface px-6 py-4"
+          style={{
+            borderTop: "0.5px solid var(--border)",
+            boxShadow: bottomShadow ? SCROLL_SHADOW_BOTTOM : "none",
+            transition: "box-shadow 200ms ease-out",
+          }}
         >
-          <div className="font-display italic text-base text-ink">
-            We did it
-          </div>
-          <Toggle
-            checked={logFormOpen}
-            onChange={setLogFormOpen}
-            label="We did it"
-          />
+          {footer}
         </div>
       )}
-
-      {!readOnly && logFormOpen && (
-        <LogVisitForm
-          pinId={pin.id}
-          spaceId={pin.space_id}
-          onSaved={() => setLogFormOpen(false)}
-          onCancel={() => setLogFormOpen(false)}
-        />
-      )}
-
-      {!readOnly && hasVisits && !logFormOpen && (
-        <button
-          type="button"
-          onClick={() => setLogFormOpen(true)}
-          className="mt-6 h-12 w-full rounded-lg bg-accent font-display italic text-[16px] text-bg"
-        >
-          Log another visit
-        </button>
-      )}
-
-      {isCreator && (
-        <button
-          type="button"
-          onClick={() => {
-            if (confirmingDelete) {
-              handleDeletePin();
-            } else {
-              setConfirmingDelete(true);
-            }
-          }}
-          className="mt-4 h-10 w-full rounded-lg text-sm"
-          style={{
-            border: confirmingDelete
-              ? "1px solid var(--accent)"
-              : "1px solid color-mix(in srgb, var(--accent) 30%, transparent)",
-            backgroundColor: confirmingDelete
-              ? "var(--accent)"
-              : "color-mix(in srgb, var(--accent) 10%, transparent)",
-            color: confirmingDelete ? "var(--bg)" : "var(--accent)",
-          }}
-        >
-          {confirmingDelete ? "Tap again to confirm" : "Delete pin"}
-        </button>
-      )}
-
-      <ImageLightbox
-        photos={lightbox?.photos ?? []}
-        initialIndex={lightbox?.index ?? 0}
-        open={lightbox != null}
-        onClose={() => setLightbox(null)}
-      />
     </div>
   );
 }

@@ -7,6 +7,11 @@ import { createClient } from "@/lib/supabase/client";
 import { useSpaces } from "@/hooks/useSpaces";
 import { usePins } from "@/hooks/usePins";
 import { findExistingPin } from "@/lib/geo";
+import {
+  useScrollShadows,
+  SCROLL_SHADOW_TOP,
+  SCROLL_SHADOW_BOTTOM,
+} from "@/lib/use-scroll-shadows";
 
 interface BaseProps {
   pendingLatLng: { lat: number; lng: number } | null;
@@ -137,23 +142,120 @@ export function AddPinForm({
     spaceId != null &&
     !insertPin.isPending;
 
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        // If we're showing the duplicate warning, the explicit "Pin a
-        // new one anyway" button is the only path forward — never fire
-        // the mutation from the implicit form submit.
-        if (showDuplicateWarning) return;
-        if (canSubmit) insertPin.mutate();
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    // If we're showing the duplicate warning, the explicit "Pin a
+    // new one anyway" button is the only path forward — never fire
+    // the mutation from the implicit form submit.
+    if (showDuplicateWarning) return;
+    if (canSubmit) insertPin.mutate();
+  }
+
+  const locationBadge = (
+    <div
+      className="rounded-xl bg-bg px-4 py-3 text-sm"
+      style={{
+        borderWidth: "1px",
+        borderStyle: "solid",
+        borderColor: pendingLatLng ? "var(--accent-2)" : "var(--border)",
+        color: pendingLatLng ? "var(--accent-2)" : "var(--ink-soft)",
       }}
-      className={
-        layout === "drawer"
-          ? "flex flex-col gap-4 px-6 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-4"
-          : "flex flex-col gap-4 px-5 pb-6 pt-2"
-      }
     >
-      {layout === "drawer" && (
+      {pendingLatLng
+        ? `pinned at ${pendingLatLng.lat.toFixed(3)}, ${pendingLatLng.lng.toFixed(3)}`
+        : "Tap on the map to set a location"}
+    </div>
+  );
+
+  const fields = (
+    <>
+      <input
+        type="text"
+        required
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="what's the dream?"
+        className="h-12 w-full rounded-lg bg-bg px-4 text-base text-ink outline-none placeholder:text-ink-soft"
+        style={{ border: "1px solid var(--border)" }}
+      />
+      <textarea
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder="anything you want to remember about it"
+        rows={3}
+        className="w-full resize-none rounded-lg bg-bg px-4 py-3 text-base text-ink outline-none placeholder:text-ink-soft"
+        style={{ border: "1px solid var(--border)" }}
+      />
+    </>
+  );
+
+  const errorMsg = insertPin.error ? (
+    <p className="text-sm text-accent">
+      {(insertPin.error as Error).message}
+    </p>
+  ) : null;
+
+  const duplicateWarning =
+    showDuplicateWarning && nearbyExistingPin ? (
+      <div
+        className="flex flex-col gap-3 rounded-xl px-4 py-3"
+        style={{
+          border: "1px solid var(--accent-2)",
+          backgroundColor:
+            "color-mix(in srgb, var(--accent-2) 12%, transparent)",
+        }}
+      >
+        <p className="text-[14px] text-ink">
+          Looks like you already pinned{" "}
+          <span className="font-display italic">
+            {nearbyExistingPin.title}
+          </span>{" "}
+          near here.
+        </p>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            onClick={() => {
+              if (onOpenExistingPin) {
+                onOpenExistingPin(nearbyExistingPin.id);
+              } else {
+                onClose();
+              }
+            }}
+            className="h-10 flex-1 rounded-lg bg-accent-2 font-display italic text-[14px] text-bg"
+          >
+            Open the existing one
+          </button>
+          <button
+            type="button"
+            onClick={() => setAcknowledgedDuplicate(true)}
+            className="h-10 flex-1 rounded-lg text-[14px] text-ink-soft"
+            style={{ border: "1px solid var(--border)" }}
+          >
+            Pin a new one anyway
+          </button>
+        </div>
+      </div>
+    ) : null;
+
+  const submitButton = !showDuplicateWarning ? (
+    <button
+      type="submit"
+      disabled={!canSubmit}
+      form="add-pin-form"
+      className="h-12 w-full rounded-lg bg-accent font-display italic text-lg text-bg disabled:opacity-50"
+    >
+      {insertPin.isPending ? "saving…" : "Drop a dream"}
+    </button>
+  ) : null;
+
+  if (layout === "drawer") {
+    return (
+      <form
+        id="add-pin-form"
+        onSubmit={handleSubmit}
+        className="flex flex-col gap-4 px-6 pb-[max(env(safe-area-inset-bottom),1.5rem)] pt-4"
+      >
         <div className="flex items-center justify-between">
           <h2 className="font-display italic text-2xl text-ink">
             Drop a dream
@@ -167,103 +269,73 @@ export function AddPinForm({
             ×
           </button>
         </div>
-      )}
+        {locationBadge}
+        {fields}
+        {errorMsg}
+        {duplicateWarning}
+        {submitButton}
+      </form>
+    );
+  }
 
-      {layout === "panel" && (
-        <h2 className="font-display italic text-[22px] text-ink">
-          Drop a dream
-        </h2>
-      )}
+  return (
+    <AddPinPanelLayout
+      onSubmit={handleSubmit}
+      footer={submitButton}
+    >
+      <h2 className="font-display italic text-[22px] text-ink">
+        Drop a dream
+      </h2>
+      {locationBadge}
+      {fields}
+      {errorMsg}
+      {duplicateWarning}
+    </AddPinPanelLayout>
+  );
+}
 
-      <div
-        className="rounded-xl bg-surface px-4 py-3 text-sm"
+// Panel layout for AddPinForm — fields scroll, "Drop a dream" submit
+// button pins to the bottom of the sidebar.
+function AddPinPanelLayout({
+  children,
+  footer,
+  onSubmit,
+}: {
+  children: React.ReactNode;
+  footer: React.ReactNode;
+  onSubmit: (e: React.FormEvent) => void;
+}) {
+  const { topSentinelRef, bottomSentinelRef, topShadow, bottomShadow } =
+    useScrollShadows();
+
+  return (
+    <div className="flex h-full flex-col bg-surface">
+      <form
+        id="add-pin-form"
+        onSubmit={onSubmit}
+        className="sidebar-scroll flex flex-1 flex-col gap-4 overflow-y-auto px-5 py-4"
         style={{
-          borderWidth: "1px",
-          borderStyle: "solid",
-          borderColor: pendingLatLng ? "var(--accent-2)" : "var(--border)",
-          color: pendingLatLng ? "var(--accent-2)" : "var(--ink-soft)",
+          minHeight: 0,
+          boxShadow: topShadow ? SCROLL_SHADOW_TOP : "none",
+          transition: "box-shadow 200ms ease-out",
         }}
       >
-        {pendingLatLng
-          ? `pinned at ${pendingLatLng.lat.toFixed(3)}, ${pendingLatLng.lng.toFixed(3)}`
-          : "Tap on the map to set a location"}
-      </div>
-
-      <input
-        type="text"
-        required
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="what's the dream?"
-        className="h-12 w-full rounded-lg bg-surface px-4 text-base text-ink outline-none placeholder:text-ink-soft"
-        style={{ border: "1px solid var(--border)" }}
-      />
-      <textarea
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        placeholder="anything you want to remember about it"
-        rows={3}
-        className="w-full resize-none rounded-lg bg-surface px-4 py-3 text-base text-ink outline-none placeholder:text-ink-soft"
-        style={{ border: "1px solid var(--border)" }}
-      />
-
-      {insertPin.error && (
-        <p className="text-sm text-accent">
-          {(insertPin.error as Error).message}
-        </p>
-      )}
-
-      {showDuplicateWarning && nearbyExistingPin && (
+        <div ref={topSentinelRef} style={{ height: 1 }} />
+        {children}
+        <div ref={bottomSentinelRef} style={{ height: 1 }} />
+      </form>
+      {footer && (
         <div
-          className="flex flex-col gap-3 rounded-xl px-4 py-3"
+          className="shrink-0 bg-surface px-5 py-4"
           style={{
-            border: "1px solid var(--accent-2)",
-            backgroundColor:
-              "color-mix(in srgb, var(--accent-2) 12%, transparent)",
+            borderTop: "0.5px solid var(--border)",
+            boxShadow: bottomShadow ? SCROLL_SHADOW_BOTTOM : "none",
+            transition: "box-shadow 200ms ease-out",
           }}
         >
-          <p className="text-[14px] text-ink">
-            Looks like you already pinned{" "}
-            <span className="font-display italic">
-              {nearbyExistingPin.title}
-            </span>{" "}
-            near here.
-          </p>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <button
-              type="button"
-              onClick={() => {
-                if (onOpenExistingPin) {
-                  onOpenExistingPin(nearbyExistingPin.id);
-                } else {
-                  onClose();
-                }
-              }}
-              className="h-10 flex-1 rounded-lg bg-accent-2 font-display italic text-[14px] text-bg"
-            >
-              Open the existing one
-            </button>
-            <button
-              type="button"
-              onClick={() => setAcknowledgedDuplicate(true)}
-              className="h-10 flex-1 rounded-lg text-[14px] text-ink-soft"
-              style={{ border: "1px solid var(--border)" }}
-            >
-              Pin a new one anyway
-            </button>
-          </div>
+          {footer}
         </div>
       )}
-
-      {!showDuplicateWarning && (
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          className="h-12 w-full rounded-lg bg-accent font-display italic text-lg text-bg disabled:opacity-50"
-        >
-          {insertPin.isPending ? "saving…" : "Drop a dream"}
-        </button>
-      )}
-    </form>
+    </div>
   );
 }

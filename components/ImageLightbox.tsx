@@ -1,24 +1,55 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
+import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
 import useEmblaCarousel from "embla-carousel-react";
 import { useIsDesktop } from "@/lib/use-is-desktop";
-import type { VisitPhoto } from "@/hooks/usePinVisits";
+
+// Source-agnostic photo shape so the lightbox can host visit photos
+// (Cloudinary), Google Places previews, or anything else without
+// learning about each upstream schema.
+export type LightboxPhoto = {
+  url: string;
+  thumbnailUrl?: string;
+  alt?: string;
+  attribution?: string;
+};
 
 interface Props {
-  photos: VisitPhoto[];
+  photos: LightboxPhoto[];
   initialIndex: number;
   open: boolean;
   onClose: () => void;
 }
 
-const SWIPE_DOWN_THRESHOLD = 90; // px of vertical drag to dismiss
-const SWIPE_DOWN_HORIZONTAL_LIMIT = 60; // ignore if also swiping sideways
+// Swipe-down dismiss thresholds. Distance OR velocity will fire — a
+// short fast flick and a long slow drag both feel like "I'm done."
+const SWIPE_DISMISS_DISTANCE = 100;
+const SWIPE_DISMISS_VELOCITY = 0.5; // px / ms
+const SWIPE_DIRECTION_LOCK_PX = 12; // movement before we lock H or V
+const SWIPE_DIRECTION_RATIO = 1.5; // |dy| > |dx| * 1.5 → vertical
 
 function reducedMotion(): boolean {
   if (typeof window === "undefined") return false;
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+// Cloudinary delivery URLs accept transformations after `/image/upload/`.
+// Inserting `f_auto,q_auto` lets Cloudinary pick the best format and
+// quality for the user's device. Non-Cloudinary URLs pass through.
+function optimizeUrl(url: string): string {
+  if (
+    !url.includes("res.cloudinary.com") ||
+    !url.includes("/image/upload/")
+  ) {
+    return url;
+  }
+  if (/\/image\/upload\/[a-z]_[a-z]/.test(url)) {
+    return url;
+  }
+  return url.replace("/image/upload/", "/image/upload/f_auto,q_auto/");
 }
 
 export default function ImageLightbox({
@@ -30,20 +61,77 @@ export default function ImageLightbox({
   const isDesktop = useIsDesktop();
   const reduced = typeof window !== "undefined" && reducedMotion();
 
+  return (
+    <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
+      <Dialog.Portal>
+        {/* Pure black overlay — no theme tint, no blur. The photo is
+            the content; the canvas behind it should disappear. */}
+        <Dialog.Overlay
+          className="fixed inset-0 z-[70]"
+          style={{ backgroundColor: "#000000" }}
+        />
+        <Dialog.Content
+          className="fixed inset-0 z-[70] flex flex-col outline-none"
+          // Radix's default outside-pointer + escape both call onClose
+          // via onOpenChange — we don't intercept those here. The
+          // photo's own click handlers are scoped per element below.
+        >
+          {/* Title + Description are required by Radix's a11y check.
+              VisuallyHidden keeps them screen-reader-only without an
+              `sr-only` Tailwind dependency. */}
+          <VisuallyHidden.Root>
+            <Dialog.Title>Photo viewer</Dialog.Title>
+            <Dialog.Description>
+              Use the arrow keys or buttons to navigate between photos.
+              Press Escape to close.
+            </Dialog.Description>
+          </VisuallyHidden.Root>
+          {open && (
+            <LightboxBody
+              photos={photos}
+              initialIndex={initialIndex}
+              onClose={onClose}
+              isDesktop={isDesktop}
+              reduced={reduced}
+            />
+          )}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+interface BodyProps {
+  photos: LightboxPhoto[];
+  initialIndex: number;
+  onClose: () => void;
+  isDesktop: boolean;
+  reduced: boolean;
+}
+
+function LightboxBody({
+  photos,
+  initialIndex,
+  onClose,
+  isDesktop,
+  reduced,
+}: BodyProps) {
+  const [activeIndex, setActiveIndex] = useState(initialIndex);
+  // Mobile-only: tap the photo to fade chrome out, tap again to bring back.
+  const [chromeVisible, setChromeVisible] = useState(true);
+  // Drive vertical-drag visual feedback. Live during a downward drag,
+  // resets on release (or animates to dismissed state on threshold hit).
+  const [dragY, setDragY] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+
   const [emblaRef, emblaApi] = useEmblaCarousel({
     startIndex: initialIndex,
     loop: false,
-    // duration is in ms in Embla 8. Reduced motion → instant snap.
     duration: reduced ? 0 : 25,
-    // Don't allow Embla to grab gestures when there's only one photo.
     watchDrag: photos.length > 1,
   });
 
-  const [activeIndex, setActiveIndex] = useState(initialIndex);
-  // Mobile-only: tap once to toggle the chrome (counter, close, strip).
-  const [uiVisible, setUiVisible] = useState(true);
-
-  // Keep activeIndex in sync with Embla's selected snap.
+  // Sync active index with Embla.
   useEffect(() => {
     if (!emblaApi) return;
     const sync = () => setActiveIndex(emblaApi.selectedScrollSnap());
@@ -54,20 +142,17 @@ export default function ImageLightbox({
     };
   }, [emblaApi]);
 
-  // Re-anchor + reset chrome when the lightbox is reopened on a new
-  // index (e.g., user closed it on photo 4, then taps photo 1 in a
-  // different visit's strip).
+  // When the lightbox reopens, anchor at initialIndex and reset chrome.
   useEffect(() => {
-    if (!open || !emblaApi) return;
+    if (!emblaApi) return;
     emblaApi.scrollTo(initialIndex, true);
     setActiveIndex(initialIndex);
-    setUiVisible(true);
-  }, [open, initialIndex, emblaApi]);
+    setChromeVisible(true);
+  }, [initialIndex, emblaApi]);
 
-  // Auto-scroll the thumb strip so the active thumb stays in view.
+  // Auto-scroll thumbnail strip to keep the active thumb visible.
   const stripRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    if (!open) return;
     const strip = stripRef.current;
     if (!strip) return;
     const active = strip.querySelector<HTMLElement>(
@@ -78,13 +163,11 @@ export default function ImageLightbox({
       inline: "center",
       block: "nearest",
     });
-  }, [activeIndex, open, reduced]);
+  }, [activeIndex, reduced]);
 
-  // Keyboard navigation. We capture at the document level + stop
-  // propagation so an Esc press inside a PinDrawer-hosted lightbox
-  // closes the lightbox without also closing the underlying drawer.
+  // Keyboard nav. Captured at document level so an Esc keypress in a
+  // PinDrawer-hosted lightbox closes only the lightbox, not the drawer.
   useEffect(() => {
-    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -100,104 +183,181 @@ export default function ImageLightbox({
     };
     document.addEventListener("keydown", onKey, true);
     return () => document.removeEventListener("keydown", onKey, true);
-  }, [open, emblaApi, onClose]);
+  }, [emblaApi, onClose]);
 
-  // Mobile swipe-down dismiss. Two-finger pinches don't trigger
-  // touchstart/touchend in the same single-finger pattern, so this
-  // doesn't interfere with pinch-zoom.
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (e.touches.length !== 1) {
-      touchStartRef.current = null;
-      return;
-    }
-    const t = e.touches[0];
-    touchStartRef.current = { x: t.clientX, y: t.clientY };
-  }, []);
-  const handleTouchEnd = useCallback(
+  // ----------------------------------------------------------
+  // Mobile vertical-drag dismiss with visual feedback
+  // ----------------------------------------------------------
+  // Strategy: track touchstart, then on touchmove decide once if the
+  // gesture is vertical (|dy| > |dx| * 1.5 after ~12px). If vertical,
+  // we apply translateY + backdrop fade live. If horizontal, we don't
+  // touch transform — Embla handles the swipe naturally.
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    startTime: number;
+    locked: "horizontal" | "vertical" | null;
+  } | null>(null);
+
+  const onTouchStart = useCallback(
     (e: React.TouchEvent) => {
-      const start = touchStartRef.current;
-      touchStartRef.current = null;
-      if (!start) return;
-      const t = e.changedTouches[0];
-      if (!t) return;
-      const dy = t.clientY - start.y;
-      const dx = t.clientX - start.x;
+      if (isDesktop) return;
+      if (e.touches.length !== 1) {
+        dragRef.current = null;
+        return;
+      }
+      const t = e.touches[0];
+      dragRef.current = {
+        startX: t.clientX,
+        startY: t.clientY,
+        startTime: performance.now(),
+        locked: null,
+      };
+      setIsDragging(true);
+    },
+    [isDesktop],
+  );
+
+  const onTouchMove = useCallback((e: React.TouchEvent) => {
+    const state = dragRef.current;
+    if (!state) return;
+    const t = e.touches[0];
+    if (!t) return;
+    const dx = t.clientX - state.startX;
+    const dy = t.clientY - state.startY;
+
+    if (state.locked === null) {
       if (
-        dy > SWIPE_DOWN_THRESHOLD &&
-        Math.abs(dx) < SWIPE_DOWN_HORIZONTAL_LIMIT
+        Math.abs(dx) > SWIPE_DIRECTION_LOCK_PX ||
+        Math.abs(dy) > SWIPE_DIRECTION_LOCK_PX
       ) {
+        state.locked =
+          Math.abs(dy) > Math.abs(dx) * SWIPE_DIRECTION_RATIO && dy > 0
+            ? "vertical"
+            : "horizontal";
+      }
+    }
+
+    if (state.locked === "vertical" && dy > 0) {
+      setDragY(dy);
+    }
+  }, []);
+
+  const onTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      const state = dragRef.current;
+      dragRef.current = null;
+      setIsDragging(false);
+      if (!state) return;
+      const t = e.changedTouches[0];
+      if (!t) {
+        setDragY(0);
+        return;
+      }
+      const dy = t.clientY - state.startY;
+      const dt = performance.now() - state.startTime;
+      const velocity = dy / Math.max(dt, 1);
+
+      const shouldDismiss =
+        state.locked === "vertical" &&
+        (dy > SWIPE_DISMISS_DISTANCE && velocity > SWIPE_DISMISS_VELOCITY);
+
+      if (shouldDismiss) {
+        // Fall through with dragY held — backdrop is already faded
+        // and the photo is offset; closing now feels continuous.
         onClose();
+        // Reset for next open (next time the body mounts dragY is
+        // already 0, but if the same body somehow re-renders before
+        // unmount we want a clean slate).
+        setDragY(0);
+      } else {
+        setDragY(0);
       }
     },
     [onClose],
   );
 
-  if (!open) return null;
+  if (photos.length === 0) return null;
 
   const isSingle = photos.length <= 1;
   const canPrev = activeIndex > 0;
   const canNext = activeIndex < photos.length - 1;
+  const dragProgress = Math.min(1, dragY / 400);
+  const backdropOpacity = reduced ? 1 : 1 - dragProgress * 0.7;
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Photo viewer"
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-      className="fixed inset-0 z-[70] image-lightbox-fadein"
-      style={{
-        backgroundColor:
-          "color-mix(in srgb, var(--bg) 95%, rgba(0, 0, 0, 0.9))",
-        backdropFilter: "blur(20px)",
-        WebkitBackdropFilter: "blur(20px)",
-      }}
-    >
-      {/* Top chrome: counter (left) + close (right). */}
+    <>
+      {/* Live backdrop tint over Dialog.Overlay's solid black so the
+          fade-during-drag effect is visible without changing the
+          actual overlay element. */}
       <div
-        className={`pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between p-4 transition-opacity duration-200 ${
-          uiVisible ? "opacity-100" : "opacity-0"
-        }`}
+        className="pointer-events-none fixed inset-0 z-[70]"
         style={{
-          paddingTop: "max(env(safe-area-inset-top), 16px)",
+          backgroundColor: "#000000",
+          opacity: backdropOpacity,
+          transition: isDragging
+            ? "none"
+            : reduced
+              ? "none"
+              : "opacity 250ms ease-out",
+        }}
+      />
+
+      {/* Top bar: counter (left) + close (right). Gradient ground so
+          chrome reads against bright photos. */}
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 z-[71]"
+        style={{
+          paddingTop: "max(env(safe-area-inset-top), 8px)",
+          background:
+            "linear-gradient(to bottom, rgba(0,0,0,0.4) 0%, transparent 100%)",
+          opacity: chromeVisible ? 1 : 0,
+          transition: reduced ? "none" : "opacity 200ms ease-out",
         }}
       >
-        {!isSingle ? (
-          <span
-            className="pointer-events-auto rounded-full px-3 py-1 font-body text-[14px] text-ink"
-            style={{
-              backgroundColor:
-                "color-mix(in srgb, var(--surface) 80%, transparent)",
-              border: "0.5px solid var(--border)",
-            }}
-          >
-            {activeIndex + 1} / {photos.length}
-          </span>
-        ) : (
-          <span aria-hidden />
-        )}
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          className="pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full text-ink"
-          style={{
-            backgroundColor:
-              "color-mix(in srgb, var(--surface) 80%, transparent)",
-            border: "0.5px solid var(--border)",
-          }}
-        >
-          <X size={20} aria-hidden />
-        </button>
+        <div className="flex h-11 items-center justify-between px-3">
+          {!isSingle ? (
+            <span
+              className="pointer-events-auto px-2 font-body text-[14px] font-medium text-white"
+              style={{
+                textShadow: "0 1px 2px rgba(0,0,0,0.5)",
+              }}
+            >
+              {activeIndex + 1} / {photos.length}
+            </span>
+          ) : (
+            <span aria-hidden />
+          )}
+          <Dialog.Close asChild>
+            <button
+              type="button"
+              aria-label="Close"
+              className="pointer-events-auto flex h-11 w-11 items-center justify-center text-white"
+            >
+              <X size={24} aria-hidden />
+            </button>
+          </Dialog.Close>
+        </div>
       </div>
 
-      {/* Carousel viewport. p-4 leaves a sliver of backdrop around the
-          slides for desktop "click outside image to dismiss" — the
-          outer onClick below catches that case. */}
+      {/* Carousel viewport. The whole region is touch-handled for
+          vertical swipe-dismiss; Embla owns horizontal. */}
       <div
-        className="absolute inset-0 flex items-center justify-center p-4"
+        className="absolute inset-0 z-[70] flex flex-col"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        style={{
+          transform: dragY > 0 && !reduced ? `translateY(${dragY}px)` : "none",
+          transition: isDragging
+            ? "none"
+            : reduced
+              ? "none"
+              : "transform 250ms ease-out",
+        }}
         onClick={(e) => {
+          // Desktop: clicking outside the photo dismisses. Mobile: the
+          // slide-level handler below toggles chrome instead.
           if (isDesktop && e.target === e.currentTarget) onClose();
         }}
       >
@@ -211,33 +371,31 @@ export default function ImageLightbox({
               const adjacent = Math.abs(i - activeIndex) <= 1;
               return (
                 <div
-                  key={p.id}
+                  key={i}
                   className="flex h-full min-w-0 shrink-0 grow-0 basis-full items-center justify-center"
                   onClick={(e) => {
                     if (isDesktop) {
-                      // Click on the slide (but not on the image
+                      // Click on the slide background (not the photo
                       // itself, which stops propagation) dismisses.
                       onClose();
                     } else {
-                      // Mobile: toggle the chrome on/off.
-                      setUiVisible((v) => !v);
+                      setChromeVisible((v) => !v);
                       e.stopPropagation();
                     }
                   }}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={p.image_url}
-                    alt=""
+                    src={optimizeUrl(p.url)}
+                    alt={p.alt ?? ""}
                     className="max-h-full max-w-full select-none object-contain"
                     style={{
-                      // Pinch-zoom is allowed on the image even if any
-                      // ancestor sets touch-action: none in the future.
+                      // Pinch-zoom passes through to the browser. Native
+                      // viewport pinch-zoom works as a fallback.
+                      // TODO: in-app 1×–4× pinch via @use-gesture/react
+                      // when we want to disable Embla during zoom and
+                      // double-tap-to-zoom-on-tap-point.
                       touchAction: "pinch-zoom",
-                      // Desktop-only max width so the image doesn't
-                      // bleed into the would-be backdrop strip.
-                      maxWidth: isDesktop ? "95vw" : "100vw",
-                      maxHeight: isDesktop ? "75vh" : "85vh",
                     }}
                     loading={adjacent ? "eager" : "lazy"}
                     draggable={false}
@@ -252,7 +410,7 @@ export default function ImageLightbox({
         </div>
       </div>
 
-      {/* Desktop arrow buttons. Hidden on mobile — gestures handle nav. */}
+      {/* Desktop arrow buttons. Mobile uses gestures. */}
       {!isSingle && isDesktop && (
         <>
           <button
@@ -260,12 +418,10 @@ export default function ImageLightbox({
             onClick={() => emblaApi?.scrollPrev()}
             disabled={!canPrev}
             aria-label="previous photo"
-            className="absolute left-4 top-1/2 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full text-ink transition-opacity hover:!opacity-100"
+            className="absolute left-4 top-1/2 z-[71] flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full text-white transition-opacity hover:!opacity-100"
             style={{
-              backgroundColor:
-                "color-mix(in srgb, var(--surface) 70%, transparent)",
-              border: "0.5px solid var(--border)",
-              opacity: canPrev ? 0.7 : 0.25,
+              backgroundColor: "rgba(255,255,255,0.10)",
+              opacity: canPrev ? 0.7 : 0.4,
             }}
           >
             <ChevronLeft size={32} aria-hidden />
@@ -275,12 +431,10 @@ export default function ImageLightbox({
             onClick={() => emblaApi?.scrollNext()}
             disabled={!canNext}
             aria-label="next photo"
-            className="absolute right-4 top-1/2 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full text-ink transition-opacity hover:!opacity-100"
+            className="absolute right-4 top-1/2 z-[71] flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-full text-white transition-opacity hover:!opacity-100"
             style={{
-              backgroundColor:
-                "color-mix(in srgb, var(--surface) 70%, transparent)",
-              border: "0.5px solid var(--border)",
-              opacity: canNext ? 0.7 : 0.25,
+              backgroundColor: "rgba(255,255,255,0.10)",
+              opacity: canNext ? 0.7 : 0.4,
             }}
           >
             <ChevronRight size={32} aria-hidden />
@@ -288,23 +442,49 @@ export default function ImageLightbox({
         </>
       )}
 
+      {/* Attribution caption (e.g., "Photo by Carlos E.") — rendered
+          above the strip so it sits over the bottom gradient and
+          fades in/out with the rest of the chrome on mobile.
+          Single-photo case still gets attribution if present. */}
+      {photos[activeIndex]?.attribution && (
+        <div
+          className="pointer-events-none absolute inset-x-0 z-[72] flex justify-center px-6"
+          style={{
+            bottom: isSingle
+              ? "calc(max(env(safe-area-inset-bottom), 0px) + 16px)"
+              : "calc(max(env(safe-area-inset-bottom), 0px) + 96px)",
+            opacity: chromeVisible ? 0.7 : 0,
+            transition: reduced ? "none" : "opacity 200ms ease-out",
+          }}
+        >
+          <span
+            className="max-w-[80%] truncate font-body text-[12px] italic text-white"
+            style={{ textShadow: "0 1px 3px rgba(0,0,0,0.6)" }}
+          >
+            {photos[activeIndex].attribution}
+          </span>
+        </div>
+      )}
+
       {/* Bottom thumbnail strip. */}
       {!isSingle && (
         <div
-          className={`pointer-events-none absolute inset-x-0 bottom-0 z-10 transition-opacity duration-200 ${
-            uiVisible ? "opacity-100" : "opacity-0"
-          }`}
+          className="pointer-events-none absolute inset-x-0 bottom-0 z-[71]"
           style={{
-            paddingBottom: "max(env(safe-area-inset-bottom), 8px)",
+            paddingBottom: "max(env(safe-area-inset-bottom), 0px)",
+            background:
+              "linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 100%)",
+            opacity: chromeVisible ? 1 : 0,
+            transition: reduced ? "none" : "opacity 200ms ease-out",
           }}
         >
           <div
             ref={stripRef}
-            className="pointer-events-auto flex justify-start gap-2 overflow-x-auto px-4 py-3 sm:justify-center"
+            className="pointer-events-auto flex justify-start gap-2 overflow-x-auto px-3 py-3 sm:justify-center"
           >
             {photos.map((p, i) => (
               <button
-                key={p.id}
+                key={i}
                 type="button"
                 data-thumb-index={i}
                 onClick={() => emblaApi?.scrollTo(i)}
@@ -314,15 +494,15 @@ export default function ImageLightbox({
                 style={{
                   border:
                     i === activeIndex
-                      ? "2px solid var(--accent)"
-                      : "0.5px solid var(--border)",
+                      ? "2px solid #FFFFFF"
+                      : "0.5px solid rgba(255,255,255,0.20)",
                   opacity: i === activeIndex ? 1 : 0.55,
-                  transition: "opacity 150ms",
+                  transition: reduced ? "none" : "opacity 150ms",
                 }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={p.image_url}
+                  src={optimizeUrl(p.thumbnailUrl ?? p.url)}
                   alt=""
                   className="h-full w-full object-cover"
                   loading="lazy"
@@ -332,6 +512,6 @@ export default function ImageLightbox({
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
