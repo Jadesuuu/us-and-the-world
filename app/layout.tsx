@@ -3,7 +3,7 @@ import { Fraunces, Inter, Caveat } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { ThemeProvider } from "@/components/ThemeProvider";
-import GalaxyStars from "@/components/GalaxyStars";
+import GalaxyBackdrop from "@/components/GalaxyBackdrop";
 import PaperTexture from "@/components/PaperTexture";
 import AtmosphericLayer from "@/components/AtmosphericLayer";
 import { Toaster } from "sonner";
@@ -69,11 +69,20 @@ export default function RootLayout({
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: fouc }} />
+        {/* Low-priority preload: warms the cache so switching to Galaxy
+            doesn't flash a black screen before the starfield paints.
+            Remove if it ever shows up as a regression on slow links. */}
+        <link
+          rel="preload"
+          as="image"
+          href="/textures/starfield.webp"
+          type="image/webp"
+        />
       </head>
       <body className="h-full flex flex-col">
         <ThemeProvider>
+          <GalaxyBackdrop />
           <AtmosphericLayer />
-          <GalaxyStars />
           <PaperTexture />
           <Providers>
             {children}
@@ -85,6 +94,7 @@ export default function RootLayout({
                   color: "var(--ink)",
                   border: "1px solid var(--border)",
                   fontFamily: "var(--font-body)",
+                  zIndex: 50,
                 },
               }}
             />

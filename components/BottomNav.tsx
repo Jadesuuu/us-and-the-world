@@ -12,7 +12,7 @@ export default function BottomNav({ active, onChange, hidden = false }: Props) {
   return (
     <nav
       aria-hidden={hidden}
-      className={`pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center pb-[max(env(safe-area-inset-bottom),0.5rem)] transition-transform duration-200 ease-out ${
+      className={`pointer-events-none fixed inset-x-0 bottom-0 z-20 flex justify-center pb-[max(env(safe-area-inset-bottom),0.5rem)] transition-transform duration-200 ease-out ${
         hidden ? "translate-y-full" : "translate-y-0"
       }`}
     >

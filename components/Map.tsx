@@ -57,6 +57,14 @@ interface Props {
   recentlyAddedId?: string | null;
   previewLatLng?: LatLng | null;
   selectedLatLng?: LatLng | null;
+  // Desktop opens with a wider FOV than mobile (smaller zoom number),
+  // so the globe doesn't appear like a marble in a wide pane. Mobile
+  // omits this prop and computeCenter's defaults apply.
+  initialZoom?: number;
+  // Set when ANY drawer is open. Locks pan/scroll/zoom so a tap on
+  // the map area registers on the Drawer.Overlay above (which closes
+  // the drawer) instead of dragging the map.
+  mapLocked?: boolean;
 }
 
 // ============================================================
@@ -66,18 +74,20 @@ interface Props {
 function applyPaintOverrides(map: mapboxgl.Map, theme: Theme) {
   const { mapPaint } = theme;
 
-  if (map.getLayer("water")) {
+  if (mapPaint.water != null && map.getLayer("water")) {
     map.setPaintProperty("water", "fill-color", mapPaint.water);
     if (mapPaint.waterOpacity != null) {
       map.setPaintProperty("water", "fill-opacity", mapPaint.waterOpacity);
     }
   }
-  for (const layer of ["land", "background"]) {
-    const def = map.getLayer(layer);
-    if (!def) continue;
-    const prop =
-      def.type === "background" ? "background-color" : "fill-color";
-    map.setPaintProperty(layer, prop, mapPaint.land);
+  if (mapPaint.land != null) {
+    for (const layer of ["land", "background"]) {
+      const def = map.getLayer(layer);
+      if (!def) continue;
+      const prop =
+        def.type === "background" ? "background-color" : "fill-color";
+      map.setPaintProperty(layer, prop, mapPaint.land);
+    }
   }
 
   if (mapPaint.roads) {
@@ -113,6 +123,20 @@ function applyPaintOverrides(map: mapboxgl.Map, theme: Theme) {
     for (const rule of mapPaint.recolorLabels) {
       if (!map.getLayer(rule.layerId)) continue;
       map.setPaintProperty(rule.layerId, "text-color", rule.textColor);
+      if (rule.textHaloColor != null) {
+        map.setPaintProperty(
+          rule.layerId,
+          "text-halo-color",
+          rule.textHaloColor,
+        );
+      }
+      if (rule.textHaloWidth != null) {
+        map.setPaintProperty(
+          rule.layerId,
+          "text-halo-width",
+          rule.textHaloWidth,
+        );
+      }
       if (rule.opacity != null) {
         map.setPaintProperty(rule.layerId, "text-opacity", rule.opacity);
       }
@@ -227,6 +251,8 @@ const Map = forwardRef<MapHandle, Props>(function Map(
     recentlyAddedId,
     previewLatLng,
     selectedLatLng,
+    initialZoom,
+    mapLocked = false,
   },
   ref,
 ) {
@@ -277,10 +303,10 @@ const Map = forwardRef<MapHandle, Props>(function Map(
     [],
   );
 
-  const initialViewState = useMemo(
-    () => computeCenter(pins ?? []),
-    [pins],
-  );
+  const initialViewState = useMemo(() => {
+    const c = computeCenter(pins ?? []);
+    return initialZoom != null ? { ...c, zoom: initialZoom } : c;
+  }, [pins, initialZoom]);
 
   // ----------------------------------------------------------
   // Re-apply enhancements when the theme switches the style URL.
@@ -337,6 +363,14 @@ const Map = forwardRef<MapHandle, Props>(function Map(
         };
       }
 
+      // Satellite themes (Galaxy): drop terrain BEFORE the fly-to so
+      // the surface goes flat instantly, before the camera moves. If
+      // we did this after, the user would see a crumpled topo morph
+      // into flat ground mid-flight, which is jarring.
+      if (profile.disableTerrain) {
+        map.setTerrain(null);
+      }
+
       const isPinSwitch = wasSelected;
       const duration = isPinSwitch
         ? PIN_SWITCH_DURATION_MS
@@ -372,10 +406,9 @@ const Map = forwardRef<MapHandle, Props>(function Map(
         });
       }
 
-      // Lock pan/scroll while the pin view is "ceremonial".
-      // Rotate stays enabled — the user can still look around the pin.
-      map.dragPan.disable();
-      map.scrollZoom.disable();
+      // Pan/scroll locking is owned by the lock effect below — we
+      // only need to ensure rotate stays available so the user can
+      // still look around the pin in 3D mode.
       map.dragRotate.enable();
 
       document.documentElement.dataset.mapMode = "3d";
@@ -406,9 +439,13 @@ const Map = forwardRef<MapHandle, Props>(function Map(
         savedCameraRef.current = null;
       }
 
-      // Restore gestures.
-      map.dragPan.enable();
-      map.scrollZoom.enable();
+      // Restore terrain if the active theme had it disabled for the
+      // pin focus. Theme switches handled in the style.load effect
+      // re-call applyEnhancements which re-adds terrain — this path
+      // covers the in-theme close.
+      if (CAMERA_PROFILES[resolvedTheme].disableTerrain) {
+        addTerrain(map);
+      }
 
       delete document.documentElement.dataset.mapMode;
     }
@@ -417,26 +454,26 @@ const Map = forwardRef<MapHandle, Props>(function Map(
   }, [selectedLatLng, resolvedTheme]);
 
   // ----------------------------------------------------------
-  // Bearing → CSS variable, for the Galaxy parallax stars
+  // Map gesture lock — driven by either pin focus or any-drawer-open.
+  // Single source of truth so the two states can't fight each other.
   // ----------------------------------------------------------
 
+  const shouldLock = selectedLatLng != null || mapLocked;
   useEffect(() => {
     const map = mapRef.current?.getMap();
     if (!map) return;
-    const handler = () => {
-      document.documentElement.style.setProperty(
-        "--bearing",
-        String(map.getBearing()),
-      );
-    };
-    handler(); // seed once
-    map.on("rotate", handler);
-    map.on("rotateend", handler);
-    return () => {
-      map.off("rotate", handler);
-      map.off("rotateend", handler);
-    };
-  }, []);
+    if (shouldLock) {
+      map.dragPan.disable();
+      map.scrollZoom.disable();
+      map.boxZoom.disable();
+      map.doubleClickZoom.disable();
+    } else {
+      map.dragPan.enable();
+      map.scrollZoom.enable();
+      map.boxZoom.enable();
+      map.doubleClickZoom.enable();
+    }
+  }, [shouldLock]);
 
   // ----------------------------------------------------------
   // Performance: cap pitch on high-DPI devices, log slow first loads.

@@ -7,6 +7,10 @@ export interface CameraProfile {
   duration: number;
   curve: number;
   speed: number;
+  // True for themes whose map style is satellite imagery: terrain
+  // exaggeration distorts photos at street zoom and is dropped before
+  // the fly-to so the user never sees it pop flat mid-flight.
+  disableTerrain?: boolean;
 }
 
 export const CAMERA_PROFILES: Record<ThemeId, CameraProfile> = {
@@ -28,14 +32,17 @@ export const CAMERA_PROFILES: Record<ThemeId, CameraProfile> = {
     curve: 1.5,
     speed: 0.75,
   },
-  // Most dramatic — descending from orbit.
+  // Satellite imagery + 3D terrain looks crumpled at street zoom.
+  // Lower pitch + flat surface keeps the "from orbit" feeling intact
+  // without the topo distortion.
   galaxy: {
-    pitch: 70,
-    bearing: 45,
-    zoom: 17.5,
-    duration: 3000,
-    curve: 1.8,
-    speed: 0.6,
+    pitch: 50,
+    bearing: 30,
+    zoom: 17,
+    duration: 2400,
+    curve: 1.5,
+    speed: 0.7,
+    disableTerrain: true,
   },
   // Flatter, topographic-map feel.
   paper: {

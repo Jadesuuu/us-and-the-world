@@ -16,10 +16,15 @@ export default function SettingsDrawer({ open, onClose }: Props) {
       onOpenChange={(o) => {
         if (!o) onClose();
       }}
-      modal={false}
+      modal
+      dismissible
     >
       <Drawer.Portal>
-        <Drawer.Content className="fixed inset-x-0 bottom-0 z-50 flex max-h-[85vh] flex-col rounded-t-3xl bg-bg outline-none border-t border-border">
+        <Drawer.Overlay
+          className="fixed inset-0 z-30"
+          style={{ backgroundColor: "color-mix(in srgb, var(--ink) 25%, transparent)" }}
+        />
+        <Drawer.Content className="fixed inset-x-0 bottom-0 z-40 flex max-h-[85vh] flex-col rounded-t-3xl bg-bg outline-none border-t border-border">
           <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-ink/20" />
           <div className="overflow-y-auto px-6 pb-8 pt-4">
             <Drawer.Title className="font-display italic text-[22px] font-medium text-ink">
@@ -38,6 +43,25 @@ export default function SettingsDrawer({ open, onClose }: Props) {
         </Drawer.Content>
       </Drawer.Portal>
     </Drawer.Root>
+  );
+}
+
+// Drawer-free version of the same content — used by the desktop popover
+// in DesktopHeader. The popover provides its own outer chrome (no title
+// element, no scroll container).
+export function SettingsContent() {
+  return (
+    <div className="flex flex-col gap-3">
+      <h2 className="font-display italic text-[20px] font-medium text-ink">
+        Settings
+      </h2>
+      <section className="mt-1">
+        <h3 className="font-display italic text-[13px] text-ink-soft">Mood</h3>
+        <div className="mt-2">
+          <ThemePicker />
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -129,38 +153,24 @@ function ThemeTile({
   );
 }
 
-// Eight scattered white dots so the Galaxy tile reads as starfield at
-// thumbnail size — not just "the dark blue tile".
-const TILE_GALAXY_STARS = [
-  { cx: 14, cy: 16, r: 0.9, o: 0.55 },
-  { cx: 28, cy: 8, r: 0.6, o: 0.4 },
-  { cx: 46, cy: 28, r: 1.0, o: 0.6 },
-  { cx: 66, cy: 14, r: 0.7, o: 0.45 },
-  { cx: 82, cy: 24, r: 1.3, o: 0.7 },
-  { cx: 22, cy: 60, r: 0.6, o: 0.35 },
-  { cx: 58, cy: 72, r: 0.9, o: 0.5 },
-  { cx: 86, cy: 80, r: 0.7, o: 0.45 },
-];
+// Tile preview: the same starfield image used in the live theme,
+// cover-fit to the tile, with a soft dark overlay so the title and
+// swatches stay legible against the brighter star clusters.
 function GalaxyTileFlourish() {
   return (
-    <svg
+    <div
       aria-hidden="true"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
       className="pointer-events-none absolute inset-0"
-      style={{ zIndex: 0 }}
-    >
-      {TILE_GALAXY_STARS.map((s, i) => (
-        <circle
-          key={i}
-          cx={s.cx}
-          cy={s.cy}
-          r={s.r}
-          fill="#ffffff"
-          opacity={s.o}
-        />
-      ))}
-    </svg>
+      style={{
+        zIndex: 0,
+        backgroundImage:
+          // Vignette overlay first (paints on top), then the photo.
+          "linear-gradient(180deg, rgba(5,11,31,0.55) 0%, rgba(5,11,31,0.15) 35%, rgba(5,11,31,0.65) 100%), " +
+          "url(/textures/starfield.webp)",
+        backgroundSize: "cover, cover",
+        backgroundPosition: "center, center",
+      }}
+    />
   );
 }
 

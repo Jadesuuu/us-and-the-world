@@ -21,27 +21,42 @@ export default function PlacePreviewSheet({
       onOpenChange={(o) => {
         if (!o) onClose();
       }}
-      modal={false}
+      modal
+      dismissible
     >
       <Drawer.Portal>
+        <Drawer.Overlay
+          className="fixed inset-0 z-30"
+          style={{ backgroundColor: "color-mix(in srgb, var(--ink) 25%, transparent)" }}
+        />
         <Drawer.Content
-          className="fixed inset-x-0 bottom-0 z-50 flex max-h-[80vh] flex-col rounded-t-3xl bg-surface outline-none"
+          className="fixed inset-x-0 bottom-0 z-40 flex max-h-[80vh] flex-col rounded-t-3xl bg-surface outline-none"
           style={{ borderTop: "0.5px solid var(--border)" }}
         >
           <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-ink-soft/40" />
-          {place && <PreviewBody place={place} onDropDream={onDropDream} />}
+          {place && (
+            <PreviewBody
+              place={place}
+              onDropDream={onDropDream}
+              titleAs="drawer"
+            />
+          )}
         </Drawer.Content>
       </Drawer.Portal>
     </Drawer.Root>
   );
 }
 
-function PreviewBody({
+// Reusable for the desktop sidebar. titleAs="drawer" uses Drawer.Title
+// (only valid inside a Vaul drawer); titleAs="panel" uses a plain <h2>.
+export function PreviewBody({
   place,
   onDropDream,
+  titleAs,
 }: {
   place: ResolvedPlace;
   onDropDream: () => void;
+  titleAs: "drawer" | "panel";
 }) {
   return (
     <div
@@ -62,9 +77,15 @@ function PreviewBody({
 
       {/* Header — scrolls with content. */}
       <div className="px-5 pt-3">
-        <Drawer.Title className="font-display italic text-[22px] leading-tight text-ink">
-          {place.name}
-        </Drawer.Title>
+        {titleAs === "drawer" ? (
+          <Drawer.Title className="font-display italic text-[22px] leading-tight text-ink">
+            {place.name}
+          </Drawer.Title>
+        ) : (
+          <h2 className="font-display italic text-[22px] leading-tight text-ink">
+            {place.name}
+          </h2>
+        )}
         {place.rating != null && (
           <div
             className="mt-1.5 flex items-center gap-2 text-[13px]"

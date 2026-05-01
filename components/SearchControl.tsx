@@ -9,6 +9,7 @@ import {
 } from "react";
 import { Search, X, Loader2 } from "lucide-react";
 import { loadPlaces } from "@/lib/google-maps-loader";
+import { useOnClickOutside } from "@/lib/use-on-click-outside";
 
 export interface PlaceReview {
   author: string;
@@ -37,9 +38,16 @@ interface Suggestion {
 interface Props {
   onPick: (place: ResolvedPlace) => void;
   onFocusChange?: (focused: boolean) => void;
+  // "floating" = mobile, fixed-positioned over the map.
+  // "inline"   = desktop, sized to its parent flex slot in DesktopHeader.
+  variant?: "floating" | "inline";
 }
 
-export default function SearchControl({ onPick, onFocusChange }: Props) {
+export default function SearchControl({
+  onPick,
+  onFocusChange,
+  variant = "floating",
+}: Props) {
   const [query, setQuery] = useState("");
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loadingScript, setLoadingScript] = useState(false);
@@ -56,6 +64,24 @@ export default function SearchControl({ onPick, onFocusChange }: Props) {
   );
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Outside-click + Escape collapse the dropdown. The blur-with-timeout
+  // dance the input used to do is gone — these handlers cover all the
+  // dismissal paths cleanly.
+  const collapse = useCallback(() => {
+    setFocused(false);
+    inputRef.current?.blur();
+  }, []);
+  useOnClickOutside(containerRef, collapse, focused);
+  useEffect(() => {
+    if (!focused) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") collapse();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [focused, collapse]);
 
   const ensurePlaces = useCallback(async () => {
     if (placesLibRef.current) return placesLibRef.current;
@@ -193,22 +219,37 @@ export default function SearchControl({ onPick, onFocusChange }: Props) {
 
   const showDropdown = focused && (query.length > 0 || suggestions.length > 0);
 
-  // Anchored to the left edge with right margin reserved for the settings
-  // button (~64px). Capped at 480px on wide screens.
+  // Floating: anchored to the top-left edge of the viewport, with right
+  // margin reserved for the settings button (~64px), capped at 480px.
+  // Inline: fills its parent slot so the desktop header can center it.
   const containerStyle = useMemo<React.CSSProperties>(
-    () => ({
-      position: "fixed",
-      top: "max(env(safe-area-inset-top, 0px) + 8px, 16px)",
-      left: 16,
-      right: 64,
-      maxWidth: 480,
-      zIndex: 30,
-    }),
-    [],
+    () =>
+      variant === "floating"
+        ? {
+            position: "fixed",
+            top: "max(env(safe-area-inset-top, 0px) + 8px, 16px)",
+            left: 16,
+            right: 64,
+            maxWidth: 480,
+            // Below the Drawer.Overlay (z-30) so an open drawer
+            // visibly covers the search bar — matches the rest of
+            // the mobile floating chrome.
+            zIndex: 20,
+          }
+        : {
+            // Stacking context so the dropdown paints over the map/sidebar
+            // rendered below the header in DOM order. Without this, the
+            // suggestions list slips under the map row.
+            position: "relative",
+            width: "100%",
+            maxWidth: 480,
+            zIndex: 30,
+          },
+    [variant],
   );
 
   return (
-    <div style={containerStyle}>
+    <div ref={containerRef} style={containerStyle}>
       <div className="relative">
         <div
           className="flex items-center gap-2 rounded-xl bg-surface px-4 shadow-sm"
@@ -224,10 +265,6 @@ export default function SearchControl({ onPick, onFocusChange }: Props) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onFocus={() => setFocused(true)}
-            onBlur={() => {
-              // Defer so a click on a dropdown item still fires.
-              setTimeout(() => setFocused(false), 120);
-            }}
             placeholder="find somewhere to dream of..."
             className="placeholder-fraunces flex-1 bg-transparent text-[16px] text-ink outline-none"
             style={{ fontFamily: "var(--font-body)" }}

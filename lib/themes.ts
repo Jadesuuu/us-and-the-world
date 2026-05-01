@@ -2,9 +2,9 @@ export type ThemeId = "dream" | "night" | "galaxy" | "paper";
 export type ThemePreference = ThemeId | "auto";
 
 export interface ThemeMapPaint {
-  water: string;
+  water?: string;
   waterOpacity?: number; // applied as fill-opacity if set
-  land: string;
+  land?: string;
   roads?: {
     color: string;
     opacity: number;
@@ -15,6 +15,8 @@ export interface ThemeMapPaint {
   recolorLabels?: Array<{
     layerId: string;
     textColor: string;
+    textHaloColor?: string;
+    textHaloWidth?: number;
     opacity?: number;
   }>;
 }
@@ -124,41 +126,61 @@ export const themes: Theme[] = [
     name: "Galaxy",
     description: "Earth at night. Quiet awe.",
     personality: "From orbit, looking down",
-    swatches: ["#050B1F", "#0A1530", "#5BC0E8", "#FF9D5C", "#E8EEF7"],
-    mapStyle: "mapbox://styles/mapbox/dark-v11",
+    // Cool palette: cyan as primary (atmosphere/starlight), violet as
+    // secondary (nebula). Warm tones competed with the satellite globe
+    // and have been retired.
+    swatches: ["#050B1F", "#0A1530", "#5BC0E8", "#B89AFF", "#E8EEF7"],
+    mapStyle: "mapbox://styles/mapbox/satellite-streets-v12",
     mapPaint: {
-      water: "#050B1F",
-      // Continents barely visible — nearly the same as bg so only
-      // outlines hint at land. Tweaked from #0E1A38 → #0A1426.
-      land: "#0A1426",
-      roads: {
-        color: "#FF9D5C",
-        opacity: 0.3,
-        lineWidthScale: 0.5, // halved — roads as faint sodium-light grid
-      },
-      buildings: { color: "#8FA0BC", opacity: 0.2 },
       hideLayers: [
         ...ROAD_LABEL_LAYERS,
         ...POI_LABEL_LAYERS,
         ...MINOR_PLACE_LABELS,
       ],
+      // White country labels with a dark halo for contrast over varied
+      // imagery; cyan major cities so they read like atmospheric/ice
+      // pinpoints, matching the cool palette.
       recolorLabels: [
-        { layerId: "country-label", textColor: "#E8EEF7", opacity: 0.3 },
-        // Major cities: warm amber dots, the only "bright" labels left.
-        { layerId: "settlement-major-label", textColor: "#FF9D5C", opacity: 0.55 },
+        {
+          layerId: "country-label",
+          textColor: "#FFFFFF",
+          textHaloColor: "rgba(0, 0, 0, 0.75)",
+          textHaloWidth: 1.5,
+          opacity: 0.85,
+        },
+        {
+          layerId: "state-label",
+          textColor: "#E8EEF7",
+          textHaloColor: "rgba(0, 0, 0, 0.7)",
+          textHaloWidth: 1.2,
+          opacity: 0.7,
+        },
+        {
+          layerId: "settlement-major-label",
+          textColor: "#5BC0E8",
+          textHaloColor: "rgba(0, 0, 0, 0.7)",
+          textHaloWidth: 1.2,
+          opacity: 0.85,
+        },
       ],
     },
-    pinFill: { visited: "var(--ink)" },
+    // Visited pins use --accent-2 (violet) — distinct from active
+    // (cyan) and from the starlight ink so a "we did it" pin reads
+    // as different state, not just a recolored dot.
+    pinFill: { visited: "var(--accent-2)" },
     vars: {
       bg: "#050B1F",
       surface: "#0A1530",
       ink: "#E8EEF7",
       "ink-soft": "#8FA0BC",
-      accent: "#FF9D5C",
-      "accent-2": "#5BC0E8",
+      accent: "#5BC0E8",
+      "accent-2": "#B89AFF",
+      // Per-creator pin distinction is dropped on Galaxy: both authors
+      // get cyan so the "active dream" reads as one consistent color
+      // against the planet's varied surface.
       "pin-jade": "#5BC0E8",
-      "pin-frances": "#FF9D5C",
-      border: "rgba(232, 238, 247, 0.08)",
+      "pin-frances": "#5BC0E8",
+      border: "rgba(232, 238, 247, 0.10)",
     },
   },
   {

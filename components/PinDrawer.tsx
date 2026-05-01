@@ -13,6 +13,7 @@ import { formatLongDate } from "@/lib/format";
 import { Toggle } from "./ui/Toggle";
 import { toast } from "sonner";
 import type { Pin } from "@/hooks/usePins";
+import ImageLightbox from "./ImageLightbox";
 
 interface Props {
   pin: Pin | null;
@@ -29,18 +30,25 @@ export default function PinDrawer({ pin, onClose, readOnly = false }: Props) {
       onOpenChange={(o) => {
         if (!o) onClose();
       }}
-      modal={false}
+      modal
+      dismissible
     >
       <Drawer.Portal>
+        {/* Overlay sits above the map (z-30) so a tap on the map area
+            actually hits the overlay and closes the drawer. */}
+        <Drawer.Overlay
+          className="fixed inset-0 z-30"
+          style={{ backgroundColor: "color-mix(in srgb, var(--ink) 25%, transparent)" }}
+        />
         <Drawer.Content
-          className={`fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-3xl bg-bg outline-none ${
+          className={`fixed inset-x-0 bottom-0 z-40 flex flex-col rounded-t-3xl bg-bg outline-none ${
             readOnly ? "max-h-[70vh]" : "max-h-[85vh]"
           }`}
           style={{ borderTop: "1px solid var(--border)" }}
         >
           <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-ink-soft/40" />
           {pin && (
-            <PinDrawerBody pin={pin} readOnly={readOnly} onClose={onClose} />
+            <PinContent pin={pin} readOnly={readOnly} onClose={onClose} />
           )}
         </Drawer.Content>
       </Drawer.Portal>
@@ -48,7 +56,10 @@ export default function PinDrawer({ pin, onClose, readOnly = false }: Props) {
   );
 }
 
-function PinDrawerBody({
+// Body is exported so the desktop sidebar can render it directly,
+// outside any Vaul context. Title is a plain <h2 data-pin-title> rather
+// than Drawer.Title so it doesn't require a dialog ancestor.
+export function PinContent({
   pin,
   readOnly,
   onClose,
@@ -75,7 +86,14 @@ function PinDrawerBody({
 
   const [logFormOpen, setLogFormOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  // Lightbox holds the *exact* photo array currently being shown plus
+  // the active index. The array is the day-group's flat list (across
+  // visits in that day) so navigation is contiguous within the strip
+  // the user opened from.
+  const [lightbox, setLightbox] = useState<{
+    photos: VisitPhoto[];
+    index: number;
+  } | null>(null);
 
   useEffect(() => {
     setLogFormOpen(false);
@@ -161,12 +179,12 @@ function PinDrawerBody({
 
   return (
     <div className="overflow-y-auto px-6 pb-8 pt-4">
-      <Drawer.Title
+      <h2
         data-pin-title
         className="font-display italic text-[28px] font-normal leading-tight text-ink"
       >
         {pin.title}
-      </Drawer.Title>
+      </h2>
       {pin.note && (
         <p className="mt-2 whitespace-pre-wrap text-[15px] text-ink-soft">
           {pin.note}
@@ -179,7 +197,7 @@ function PinDrawerBody({
           currentUserId={currentUser?.id ?? null}
           profilesByUser={profilesByUser}
           showChips={showChips}
-          onPhotoClick={setLightboxUrl}
+          onPhotoClick={(photos, index) => setLightbox({ photos, index })}
         />
       )}
 
@@ -243,9 +261,12 @@ function PinDrawerBody({
         </button>
       )}
 
-      {lightboxUrl && (
-        <Lightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
-      )}
+      <ImageLightbox
+        photos={lightbox?.photos ?? []}
+        initialIndex={lightbox?.index ?? 0}
+        open={lightbox != null}
+        onClose={() => setLightbox(null)}
+      />
     </div>
   );
 }
@@ -318,7 +339,7 @@ function VisitTimeline({
   currentUserId: string | null;
   profilesByUser: Record<string, Profile>;
   showChips: boolean;
-  onPhotoClick: (url: string) => void;
+  onPhotoClick: (photos: VisitPhoto[], index: number) => void;
 }) {
   const groups = useMemo(() => groupVisitsByDate(visits), [visits]);
 
@@ -365,7 +386,7 @@ function DayGroupCard({
   currentUserId: string | null;
   profilesByUser: Record<string, Profile>;
   showChips: boolean;
-  onPhotoClick: (url: string) => void;
+  onPhotoClick: (photos: VisitPhoto[], index: number) => void;
 }) {
   const [editingVisitId, setEditingVisitId] = useState<string | null>(null);
 
@@ -470,11 +491,11 @@ function DayGroupCard({
 
       {photos.length > 0 && (
         <div className="-mx-6 flex gap-2 overflow-x-auto px-6 pb-1">
-          {photos.map((p) => (
+          {photos.map((p, i) => (
             <button
               key={p.id}
               type="button"
-              onClick={() => onPhotoClick(p.image_url)}
+              onClick={() => onPhotoClick(photos, i)}
               className="shrink-0 overflow-hidden rounded-lg"
               style={{ height: 80, width: 80 }}
             >
@@ -1094,26 +1115,3 @@ function PendingPhotoThumb({
   );
 }
 
-// ============================================================
-// Lightbox
-// ============================================================
-
-function Lightbox({ url, onClose }: { url: string; onClose: () => void }) {
-  return (
-    <div
-      onClick={onClose}
-      role="dialog"
-      aria-label="Photo"
-      className="fixed inset-0 z-[70] flex items-center justify-center p-4"
-      style={{ backgroundColor: "rgba(0,0,0,0.92)" }}
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={url}
-        alt=""
-        className="max-h-full max-w-full object-contain"
-        onClick={(e) => e.stopPropagation()}
-      />
-    </div>
-  );
-}

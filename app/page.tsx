@@ -3,6 +3,8 @@
 import { useMemo, useRef, useState } from "react";
 import Map, { type LatLng, type MapHandle } from "@/components/Map";
 import PinDrawer, { ordinalTimeLabel } from "@/components/PinDrawer";
+import ImageLightbox from "@/components/ImageLightbox";
+import type { VisitPhoto } from "@/hooks/usePinVisits";
 import AddPinDrawer from "@/components/AddPinDrawer";
 import BottomNav, { type Tab } from "@/components/BottomNav";
 import SettingsDrawer from "@/components/SettingsDrawer";
@@ -10,6 +12,8 @@ import SearchControl, {
   type ResolvedPlace,
 } from "@/components/SearchControl";
 import PlacePreviewSheet from "@/components/PlacePreviewSheet";
+import DesktopLayout from "@/components/desktop/DesktopLayout";
+import { useIsDesktop } from "@/lib/use-is-desktop";
 import { usePins } from "@/hooks/usePins";
 import { useAllVisits, type VisitWithPin } from "@/hooks/useAllVisits";
 import { formatLongDate } from "@/lib/format";
@@ -17,12 +21,15 @@ import { findExistingPin } from "@/lib/geo";
 import { toast } from "sonner";
 
 export default function Home() {
+  const isDesktop = useIsDesktop();
+
+  // Shared state, owned at the page level so both layouts agree on
+  // current selection / pending pin / preview place.
   const [activeTab, setActiveTab] = useState<Tab>("map");
   const [selectedPinId, setSelectedPinId] = useState<string | null>(null);
   const [pendingLatLng, setPendingLatLng] = useState<LatLng | null>(null);
   const [recentlyAddedId, setRecentlyAddedId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-
   const [previewPlace, setPreviewPlace] = useState<ResolvedPlace | null>(null);
   const [pendingPrefillTitle, setPendingPrefillTitle] = useState<string>("");
   const [searchFocused, setSearchFocused] = useState(false);
@@ -32,8 +39,6 @@ export default function Home() {
   const { data: pins } = usePins();
   const selectedPin = pins?.find((p) => p.id === selectedPinId) ?? null;
 
-  // Memoized so the Map's camera effect only re-fires when the selection
-  // actually changes, not on every parent render.
   const selectedLatLng = useMemo(() => {
     if (!selectedPin || selectedPin.lat == null || selectedPin.lng == null) {
       return null;
@@ -88,22 +93,110 @@ export default function Home() {
     setActiveTab("add");
   }
 
-  return (
-    <main className="relative flex flex-1">
-      <Map
-        ref={mapHandle}
-        onMarkerClick={(id) => {
+  function handleMapClick(latlng: LatLng) {
+    if (isAddOpen) {
+      setPendingLatLng(latlng);
+    } else if (selectedPinId) {
+      setSelectedPinId(null);
+    }
+  }
+
+  function handleMarkerClick(id: string) {
+    setActiveTab("map");
+    setPendingLatLng(null);
+    setSettingsOpen(false);
+    setPreviewPlace(null);
+    setSelectedPinId(id);
+  }
+
+  function handleOpenExistingFromAdd(pinId: string) {
+    setActiveTab("map");
+    setPendingLatLng(null);
+    setPendingPrefillTitle("");
+    setSettingsOpen(false);
+    setSelectedPinId(pinId);
+  }
+
+  // Mutual-exclusivity helpers — opening any drawer closes the others
+  // so two drawers can never overlap on screen at once.
+  function openSettings() {
+    setSelectedPinId(null);
+    setPreviewPlace(null);
+    setActiveTab("map");
+    setPendingLatLng(null);
+    setPendingPrefillTitle("");
+    setSettingsOpen(true);
+  }
+
+  function handleBottomNavChange(t: Tab) {
+    if (t === "add") {
+      setSelectedPinId(null);
+      setPreviewPlace(null);
+      setSettingsOpen(false);
+    }
+    setActiveTab(t);
+  }
+
+  // Drawer-open signal for the map gesture lock. selectedLatLng-driven
+  // locking is handled inside Map.tsx; here we only flag the drawers
+  // that aren't otherwise represented in selectedLatLng.
+  const mapLocked =
+    settingsOpen || previewPlace != null || (isAddOpen && !pendingLatLng);
+  // Note on the AddPinDrawer half: we INTENTIONALLY don't lock once
+  // the user has placed a pendingLatLng, because they might want to
+  // adjust by tapping the map again. The "tap to set" stage is when
+  // accidental drag is most disorienting.
+
+  // ============================================================
+  // Desktop layout
+  // ============================================================
+  if (isDesktop) {
+    return (
+      <DesktopLayout
+        mapRef={mapHandle}
+        selectedPin={selectedPin}
+        selectedLatLng={selectedLatLng}
+        isAddOpen={isAddOpen}
+        pendingLatLng={pendingLatLng}
+        pendingPrefillTitle={pendingPrefillTitle}
+        recentlyAddedId={recentlyAddedId}
+        previewPlace={previewPlace}
+        onMarkerClick={handleMarkerClick}
+        onMapClick={handleMapClick}
+        onSelectPin={(id) => {
           setActiveTab("map");
           setPendingLatLng(null);
           setSelectedPinId(id);
         }}
-        onMapClick={(latlng) => {
-          if (isAddOpen) {
-            setPendingLatLng(latlng);
-          } else if (selectedPinId) {
-            setSelectedPinId(null);
-          }
+        onCloseDetail={() => setSelectedPinId(null)}
+        onOpenAdd={() => {
+          setSelectedPinId(null);
+          setPreviewPlace(null);
+          setActiveTab("add");
         }}
+        onCloseAdd={() => {
+          setActiveTab("map");
+          setPendingLatLng(null);
+          setPendingPrefillTitle("");
+        }}
+        onSubmittedAdd={handleSubmitted}
+        onOpenExistingFromAdd={handleOpenExistingFromAdd}
+        onPlacePick={handlePlacePick}
+        onClosePreview={() => setPreviewPlace(null)}
+        onDropDreamFromPreview={handlePlaceDrop}
+      />
+    );
+  }
+
+  // ============================================================
+  // Mobile layout (unchanged)
+  // ============================================================
+  return (
+    <main className="relative flex flex-1">
+      <Map
+        ref={mapHandle}
+        onMarkerClick={handleMarkerClick}
+        onMapClick={handleMapClick}
         pendingLatLng={isAddOpen ? pendingLatLng : null}
         previewLatLng={
           previewPlace
@@ -112,6 +205,7 @@ export default function Home() {
         }
         selectedLatLng={selectedLatLng}
         recentlyAddedId={recentlyAddedId}
+        mapLocked={mapLocked}
       />
 
       {isMap && (
@@ -124,8 +218,8 @@ export default function Home() {
       <button
         type="button"
         aria-label="Settings"
-        onClick={() => setSettingsOpen(true)}
-        className="fixed right-4 top-[max(env(safe-area-inset-top),1rem)] z-30 flex h-10 w-10 items-center justify-center rounded-full bg-surface text-ink"
+        onClick={openSettings}
+        className="fixed right-4 top-[max(env(safe-area-inset-top),1rem)] z-20 flex h-10 w-10 items-center justify-center rounded-full bg-surface text-ink"
         style={{ border: "1px solid var(--border)" }}
       >
         <span aria-hidden className="text-lg leading-none tracking-widest">
@@ -149,12 +243,7 @@ export default function Home() {
           setPendingPrefillTitle("");
         }}
         onSubmitted={handleSubmitted}
-        onOpenExistingPin={(pinId) => {
-          setActiveTab("map");
-          setPendingLatLng(null);
-          setPendingPrefillTitle("");
-          setSelectedPinId(pinId);
-        }}
+        onOpenExistingPin={handleOpenExistingFromAdd}
       />
 
       <PlacePreviewSheet
@@ -172,7 +261,7 @@ export default function Home() {
 
       <BottomNav
         active={activeTab}
-        onChange={setActiveTab}
+        onChange={handleBottomNavChange}
         hidden={isMap && searchFocused}
       />
     </main>
@@ -185,6 +274,14 @@ function MemoriesPanel({
   onSelect: (pinId: string) => void;
 }) {
   const { data: visits = [] } = useAllVisits();
+
+  // Photo lightbox is scoped to the visit whose photo was tapped —
+  // one visit's photos at a time, never combined across visits per
+  // the design constraint.
+  const [lightbox, setLightbox] = useState<{
+    photos: VisitPhoto[];
+    index: number;
+  } | null>(null);
 
   // Visits already arrive newest-first. The "Nth time" label is computed
   // per-pin from the chronological (ascending) order.
@@ -227,11 +324,21 @@ function MemoriesPanel({
                 visit={v}
                 ordinal={ordinalById[v.id] ?? 1}
                 onClick={() => onSelect(v.pin_id)}
+                onOpenPhoto={() =>
+                  setLightbox({ photos: v.visit_photos ?? [], index: 0 })
+                }
               />
             ))}
           </div>
         )}
       </div>
+
+      <ImageLightbox
+        photos={lightbox?.photos ?? []}
+        initialIndex={lightbox?.index ?? 0}
+        open={lightbox != null}
+        onClose={() => setLightbox(null)}
+      />
     </div>
   );
 }
@@ -240,33 +347,46 @@ function VisitCard({
   visit,
   ordinal,
   onClick,
+  onOpenPhoto,
 }: {
   visit: VisitWithPin;
   ordinal: number;
   onClick: () => void;
+  onOpenPhoto: () => void;
 }) {
   const cover = visit.visit_photos?.[0]?.image_url;
+  // Photo region and text region are sibling buttons inside a div so
+  // tapping the photo opens the lightbox while tapping the text
+  // navigates to the pin — no nested-button HTML invalidity.
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex flex-col overflow-hidden rounded-xl bg-surface text-left"
+    <div
+      className="flex flex-col overflow-hidden rounded-xl bg-surface"
       style={{ border: "1px solid var(--border)" }}
     >
-      <div className="aspect-square w-full bg-surface">
-        {cover ? (
-          // eslint-disable-next-line @next/next/no-img-element
+      {cover ? (
+        <button
+          type="button"
+          onClick={onOpenPhoto}
+          aria-label="View photo"
+          className="aspect-square w-full bg-surface"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={cover}
             alt={visit.pin?.title ?? ""}
             className="h-full w-full object-cover"
           />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center font-display italic text-sm text-ink-soft">
-            no photo
-          </div>
-        )}
-      </div>
+        </button>
+      ) : (
+        <div className="flex aspect-square w-full items-center justify-center bg-surface font-display italic text-sm text-ink-soft">
+          no photo
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex w-full flex-col text-left"
+      >
       <div className="flex flex-col gap-1 p-3">
         <div className="text-[10px] uppercase tracking-wider text-accent">
           {ordinalTimeLabel(ordinal)}
@@ -283,6 +403,7 @@ function VisitCard({
           {formatLongDate(visit.visited_at)}
         </div>
       </div>
-    </button>
+      </button>
+    </div>
   );
 }
