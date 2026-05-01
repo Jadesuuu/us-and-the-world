@@ -1,8 +1,17 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Drawer } from "vaul";
 import { themes, type Theme } from "@/lib/themes";
 import { useTheme } from "./ThemeProvider";
+import { Toggle } from "./ui/Toggle";
+import {
+  checkPushSupport,
+  getCurrentSubscription,
+  subscribeToPush,
+  unsubscribeFromPush,
+} from "@/lib/push";
+import { toast } from "sonner";
 
 interface Props {
   open: boolean;
@@ -33,6 +42,15 @@ export default function SettingsDrawer({ open, onClose }: Props) {
 
             <section className="mt-6">
               <h3 className="font-display italic text-[14px] text-ink-soft">
+                Notifications
+              </h3>
+              <div className="mt-3">
+                <NotificationToggle />
+              </div>
+            </section>
+
+            <section className="mt-6">
+              <h3 className="font-display italic text-[14px] text-ink-soft">
                 Mood
               </h3>
               <div className="mt-3">
@@ -56,11 +74,109 @@ export function SettingsContent() {
         Settings
       </h2>
       <section className="mt-1">
+        <h3 className="font-display italic text-[13px] text-ink-soft">
+          Notifications
+        </h3>
+        <div className="mt-2">
+          <NotificationToggle />
+        </div>
+      </section>
+      <section className="mt-3">
         <h3 className="font-display italic text-[13px] text-ink-soft">Mood</h3>
         <div className="mt-2">
           <ThemePicker />
         </div>
       </section>
+    </div>
+  );
+}
+
+// Push-notifications opt-in. Reflects the live state of the browser's
+// PushManager subscription so the toggle is honest across reloads,
+// other devices, and OS-level permission revocation.
+function NotificationToggle() {
+  const [enabled, setEnabled] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const support = checkPushSupport();
+      if (!support.supported) {
+        if (!alive) return;
+        if (support.reason === "ios-needs-pwa-install") {
+          setHint(
+            "On iPhone: tap Share → Add to Home Screen, then come back here.",
+          );
+        } else {
+          setHint("This browser doesn't support push notifications.");
+        }
+        return;
+      }
+      const sub = await getCurrentSubscription();
+      if (alive) setEnabled(sub != null);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function onChange(next: boolean) {
+    setBusy(true);
+    try {
+      if (next) {
+        const ok = await subscribeToPush();
+        if (ok) {
+          setEnabled(true);
+          toast("Notifications on — you'll know when a new dream lands.");
+        } else {
+          setEnabled(false);
+          toast.error("Permission denied. You can re-enable in browser settings.");
+        }
+      } else {
+        await unsubscribeFromPush();
+        setEnabled(false);
+        toast("Notifications off.");
+      }
+    } catch (err) {
+      setEnabled(false);
+      toast.error(
+        err instanceof Error ? err.message : "Couldn't update notifications.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const disabled = busy || hint != null;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div
+        className="flex items-center justify-between rounded-xl bg-surface px-4 py-3"
+        style={{ border: "1px solid var(--border)" }}
+      >
+        <div className="flex flex-col">
+          <span className="font-display italic text-[15px] text-ink">
+            New pin from your partner
+          </span>
+          <span className="text-[12px] text-ink-soft">
+            Get notified when a new place is dreamed of
+          </span>
+        </div>
+        <Toggle
+          checked={enabled}
+          onChange={onChange}
+          disabled={disabled}
+          label="Notify on new partner pins"
+        />
+      </div>
+      {hint && (
+        <p className="px-1 font-body italic text-[12px] text-ink-soft">
+          {hint}
+        </p>
+      )}
     </div>
   );
 }

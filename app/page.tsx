@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Map, { type LatLng, type MapHandle } from "@/components/Map";
 import PinDrawer, { ordinalTimeLabel } from "@/components/PinDrawer";
 import ImageLightbox from "@/components/ImageLightbox";
@@ -13,6 +13,7 @@ import SearchControl, {
 } from "@/components/SearchControl";
 import PlacePreviewSheet from "@/components/PlacePreviewSheet";
 import DesktopLayout from "@/components/desktop/DesktopLayout";
+import { SELECT_PIN_EVENT } from "@/components/RealtimeBridge";
 import { useIsDesktop } from "@/lib/use-is-desktop";
 import { usePins } from "@/hooks/usePins";
 import { useAllVisits, type VisitWithPin } from "@/hooks/useAllVisits";
@@ -108,6 +109,56 @@ export default function Home() {
     setPreviewPlace(null);
     setSelectedPinId(id);
   }
+
+  // Three entry points all converge on "open this pin":
+  //   1. Realtime toast "Open" action  → window CustomEvent
+  //   2. Push-notification click on an open tab  → SW postMessage
+  //   3. Push-notification click on a fresh tab  → ?pin=<id> URL param
+  useEffect(() => {
+    function selectPinById(pinId: string) {
+      const pin = pins?.find((p) => p.id === pinId);
+      if (!pin) return;
+      handleMarkerClick(pinId);
+      if (pin.lat != null && pin.lng != null) {
+        mapHandle.current?.flyTo({ lat: pin.lat, lng: pin.lng });
+      }
+    }
+
+    function onSelectPinEvent(e: Event) {
+      const ce = e as CustomEvent<string>;
+      if (typeof ce.detail === "string") selectPinById(ce.detail);
+    }
+
+    function onSwMessage(e: MessageEvent) {
+      const data = e.data as { type?: string; pinId?: string } | null;
+      if (data?.type === "jf:select-pin" && typeof data.pinId === "string") {
+        selectPinById(data.pinId);
+      }
+    }
+
+    window.addEventListener(SELECT_PIN_EVENT, onSelectPinEvent);
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.addEventListener("message", onSwMessage);
+    }
+
+    // Honor the deep-link URL param once pins have loaded. We strip the
+    // param from the address bar so reloads don't re-fire the open.
+    const urlPinId = new URLSearchParams(window.location.search).get("pin");
+    if (urlPinId && pins) {
+      selectPinById(urlPinId);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("pin");
+      window.history.replaceState({}, "", url.toString());
+    }
+
+    return () => {
+      window.removeEventListener(SELECT_PIN_EVENT, onSelectPinEvent);
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.removeEventListener("message", onSwMessage);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pins]);
 
   function handleOpenExistingFromAdd(pinId: string) {
     setActiveTab("map");
