@@ -35,10 +35,10 @@ export const metadata: Metadata = {
     title: "JF & The World",
     statusBarStyle: "black-translucent",
   },
-  icons: {
-    icon: "/icons/icon-192.png",
-    apple: "/icons/icon-192.png",
-  },
+  // Icons are auto-discovered from the file-system convention:
+  //   app/icon.svg         → browser tab (any size, scales cleanly)
+  //   app/apple-icon.png   → iOS home-screen
+  //   public/icons/*.png   → PWA manifest (referenced by manifest.json)
 };
 
 export const viewport: Viewport = {
