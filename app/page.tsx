@@ -243,24 +243,32 @@ export default function Home() {
   }
 
   // ============================================================
-  // Mobile layout (unchanged)
+  // Mobile layout
   // ============================================================
+  // Map and Lived live as sibling flex children so the BottomNav (last
+  // child of <main>) is always reachable. Map stays mounted under
+  // display:none while Lived is active so Mapbox doesn't reinitialize.
   return (
-    <main className="relative flex flex-1">
-      <Map
-        ref={mapHandle}
-        onMarkerClick={handleMarkerClick}
-        onMapClick={handleMapClick}
-        pendingLatLng={isAddOpen ? pendingLatLng : null}
-        previewLatLng={
-          previewPlace
-            ? { lat: previewPlace.lat, lng: previewPlace.lng }
-            : null
-        }
-        selectedLatLng={selectedLatLng}
-        recentlyAddedId={recentlyAddedId}
-        mapLocked={mapLocked}
-      />
+    <main className="relative flex flex-1 flex-col">
+      <div
+        className="relative flex-1"
+        style={{ display: isMemories ? "none" : "flex" }}
+      >
+        <Map
+          ref={mapHandle}
+          onMarkerClick={handleMarkerClick}
+          onMapClick={handleMapClick}
+          pendingLatLng={isAddOpen ? pendingLatLng : null}
+          previewLatLng={
+            previewPlace
+              ? { lat: previewPlace.lat, lng: previewPlace.lng }
+              : null
+          }
+          selectedLatLng={selectedLatLng}
+          recentlyAddedId={recentlyAddedId}
+          mapLocked={mapLocked}
+        />
+      </div>
 
       {isMap && (
         <SearchControl
@@ -311,7 +319,10 @@ export default function Home() {
         onClose={() => setSettingsOpen(false)}
       />
 
-      {isMemories && <MemoriesPanel onSelect={setSelectedPinId} />}
+      <MemoriesPanel
+        onSelect={setSelectedPinId}
+        hidden={!isMemories}
+      />
 
       <BottomNav
         active={activeTab}
@@ -324,8 +335,10 @@ export default function Home() {
 
 function MemoriesPanel({
   onSelect,
+  hidden,
 }: {
   onSelect: (pinId: string) => void;
+  hidden: boolean;
 }) {
   const { entries } = useLivedEntries();
   const { data: profiles } = useProfiles();
@@ -353,8 +366,18 @@ function MemoriesPanel({
     return entries.filter((e) => e.pinTitle.toLowerCase().includes(q));
   }, [query, entries]);
 
+  // Normal-flow scroll container, sibling to the map container. Bottom
+  // padding clears the floating BottomNav (~56px pill + safe area)
+  // so the last memory card isn't hidden behind it.
   return (
-    <div className="absolute inset-x-0 bottom-0 top-0 z-30 overflow-y-auto bg-bg pb-28 pt-[max(env(safe-area-inset-top),1.5rem)]">
+    <div
+      className="relative flex-1 overflow-y-auto bg-bg pt-[max(env(safe-area-inset-top),1.5rem)]"
+      style={{
+        display: hidden ? "none" : "flex",
+        flexDirection: "column",
+        paddingBottom: "calc(72px + env(safe-area-inset-bottom))",
+      }}
+    >
       <div className="mx-auto max-w-3xl px-4">
         <h2 className="font-display italic text-[22px] font-medium text-ink">
           Lived
