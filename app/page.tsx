@@ -369,13 +369,22 @@ function MemoriesPanel({
   // Normal-flow scroll container, sibling to the map container. Bottom
   // padding clears the floating BottomNav (~56px pill + safe area)
   // so the last memory card isn't hidden behind it.
+  //
+  // min-h-0 is the standard flex fix — flex items default to
+  // min-height: auto (content size), which would let this grow past
+  // its allocated space instead of scrolling. overflow-y: scroll keeps
+  // the container always-scrollable so iOS rubber-band fires even
+  // when content is shorter than the viewport. overscroll-behavior:
+  // contain stops the bounce from leaking up to body (which has
+  // overscroll-behavior: none).
   return (
     <div
-      className="relative flex-1 overflow-y-auto bg-bg pt-[max(env(safe-area-inset-top),1.5rem)]"
+      className="relative flex-1 min-h-0 overflow-y-scroll bg-bg pt-[max(env(safe-area-inset-top),1.5rem)]"
       style={{
         display: hidden ? "none" : "flex",
         flexDirection: "column",
         paddingBottom: "calc(72px + env(safe-area-inset-bottom))",
+        overscrollBehavior: "contain",
       }}
     >
       <div className="mx-auto max-w-3xl px-4">
