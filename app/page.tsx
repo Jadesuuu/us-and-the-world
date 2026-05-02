@@ -366,60 +366,65 @@ function MemoriesPanel({
     return entries.filter((e) => e.pinTitle.toLowerCase().includes(q));
   }, [query, entries]);
 
-  // Normal-flow scroll container, sibling to the map container. Bottom
-  // padding clears the floating BottomNav (~56px pill + safe area)
-  // so the last memory card isn't hidden behind it.
-  //
-  // min-h-0 is the standard flex fix — flex items default to
-  // min-height: auto (content size), which would let this grow past
-  // its allocated space instead of scrolling. overflow-y: scroll keeps
-  // the container always-scrollable so iOS rubber-band fires even
-  // when content is shorter than the viewport. overscroll-behavior:
-  // contain stops the bounce from leaking up to body (which has
-  // overscroll-behavior: none).
+  // Two-layer container. The OUTER div is the flex item that takes its
+  // share of <main>'s height (flex-1 + min-h-0) and clips with
+  // overflow:hidden — without min-h-0 a column flex item defaults to
+  // min-height:auto and grows to fit all content, defeating scroll.
+  // The INNER div is the actual scroll container (h-full +
+  // overflow-y:auto). Combining wrapper + scroller into one element
+  // breaks momentum scroll on iOS when the same element is also a
+  // column flex container, which is why this is split.
   return (
     <div
-      className="relative flex-1 min-h-0 overflow-y-scroll bg-bg pt-[max(env(safe-area-inset-top),1.5rem)]"
+      className="relative flex-1 min-h-0 bg-bg"
       style={{
         display: hidden ? "none" : "flex",
         flexDirection: "column",
-        paddingBottom: "calc(72px + env(safe-area-inset-bottom))",
-        overscrollBehavior: "contain",
+        overflow: "hidden",
       }}
     >
-      <div className="mx-auto max-w-3xl px-4">
-        <h2 className="font-display italic text-[22px] font-medium text-ink">
-          Lived
-        </h2>
-        <p className="mt-1 text-sm text-ink-soft">
-          {entries.length} {entries.length === 1 ? "memory" : "memories"}
-        </p>
-
-        <div className="mt-4">
-          <MemorySearch value={query} onChange={setQuery} />
-        </div>
-
-        {entries.length === 0 ? (
-          <p className="mt-16 text-center font-display italic text-lg text-ink-soft">
-            Nothing here yet — go make one.
+      <div
+        className="h-full w-full overflow-y-auto pt-[max(env(safe-area-inset-top),1.5rem)]"
+        style={{
+          WebkitOverflowScrolling: "touch",
+          paddingBottom: "calc(72px + env(safe-area-inset-bottom))",
+          overscrollBehavior: "contain",
+        }}
+      >
+        <div className="mx-auto max-w-3xl px-4">
+          <h2 className="font-display italic text-[22px] font-medium text-ink">
+            Lived
+          </h2>
+          <p className="mt-1 text-sm text-ink-soft">
+            {entries.length} {entries.length === 1 ? "memory" : "memories"}
           </p>
-        ) : filtered.length === 0 ? (
-          <NoMatchEmptyState query={query} />
-        ) : (
-          <div className="mt-6 grid grid-cols-2 gap-3">
-            {filtered.map((entry) => (
-              <VisitCard
-                key={entry.key}
-                entry={entry}
-                profilesByUser={profilesByUser}
-                onClick={() => onSelect(entry.pinId)}
-                onOpenPhoto={(photos, index) =>
-                  setLightbox({ photos, index })
-                }
-              />
-            ))}
+
+          <div className="mt-4">
+            <MemorySearch value={query} onChange={setQuery} />
           </div>
-        )}
+
+          {entries.length === 0 ? (
+            <p className="mt-16 text-center font-display italic text-lg text-ink-soft">
+              Nothing here yet — go make one.
+            </p>
+          ) : filtered.length === 0 ? (
+            <NoMatchEmptyState query={query} />
+          ) : (
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              {filtered.map((entry) => (
+                <VisitCard
+                  key={entry.key}
+                  entry={entry}
+                  profilesByUser={profilesByUser}
+                  onClick={() => onSelect(entry.pinId)}
+                  onOpenPhoto={(photos, index) =>
+                    setLightbox({ photos, index })
+                  }
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <ImageLightbox
