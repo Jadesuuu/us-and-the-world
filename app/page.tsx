@@ -4,7 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Map, { type LatLng, type MapHandle } from "@/components/Map";
 import PinDrawer, { ordinalTimeLabel } from "@/components/PinDrawer";
 import ImageLightbox from "@/components/ImageLightbox";
+import { VisitNotes, type VisitNoteEntry } from "@/components/ui/VisitNotes";
+import { MemorySearch } from "@/components/ui/MemorySearch";
 import type { VisitPhoto } from "@/hooks/usePinVisits";
+import { useLivedEntries, type LivedEntry } from "@/hooks/useLivedEntries";
+import { useProfiles, type Profile } from "@/hooks/useProfiles";
 import AddPinDrawer from "@/components/AddPinDrawer";
 import BottomNav, { type Tab } from "@/components/BottomNav";
 import SettingsDrawer from "@/components/SettingsDrawer";
@@ -16,7 +20,6 @@ import DesktopLayout from "@/components/desktop/DesktopLayout";
 import { SELECT_PIN_EVENT } from "@/components/RealtimeBridge";
 import { useIsDesktop } from "@/lib/use-is-desktop";
 import { usePins } from "@/hooks/usePins";
-import { useAllVisits, type VisitWithPin } from "@/hooks/useAllVisits";
 import { formatLongDate } from "@/lib/format";
 import { findExistingPin } from "@/lib/geo";
 import { toast } from "sonner";
@@ -324,34 +327,31 @@ function MemoriesPanel({
 }: {
   onSelect: (pinId: string) => void;
 }) {
-  const { data: visits = [] } = useAllVisits();
+  const { entries } = useLivedEntries();
+  const { data: profiles } = useProfiles();
+  const [query, setQuery] = useState("");
 
-  // Photo lightbox is scoped to the visit whose photo was tapped —
-  // one visit's photos at a time, never combined across visits per
-  // the design constraint.
+  // Lightbox photos are merged across the entry's visits in
+  // chronological order — same as the day-group strip in PinDrawer,
+  // so opening a card's photo navigates the entire day's roll.
   const [lightbox, setLightbox] = useState<{
     photos: VisitPhoto[];
     index: number;
   } | null>(null);
 
-  // Visits already arrive newest-first. The "Nth time" label is computed
-  // per-pin from the chronological (ascending) order.
-  const ordinalById = useMemo(() => {
-    const byPin: Record<string, VisitWithPin[]> = {};
-    visits.forEach((v) => {
-      (byPin[v.pin_id] ??= []).push(v);
-    });
-    const m: Record<string, number> = {};
-    Object.values(byPin).forEach((pinVisits) => {
-      const asc = [...pinVisits].sort((a, b) =>
-        a.visited_at.localeCompare(b.visited_at),
-      );
-      asc.forEach((v, i) => {
-        m[v.id] = i + 1;
-      });
+  const profilesByUser = useMemo(() => {
+    const m: Record<string, Profile> = {};
+    (profiles ?? []).forEach((p) => {
+      m[p.user_id] = p;
     });
     return m;
-  }, [visits]);
+  }, [profiles]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return entries;
+    return entries.filter((e) => e.pinTitle.toLowerCase().includes(q));
+  }, [query, entries]);
 
   return (
     <div className="absolute inset-x-0 bottom-0 top-0 z-30 overflow-y-auto bg-bg pb-28 pt-[max(env(safe-area-inset-top),1.5rem)]">
@@ -360,23 +360,29 @@ function MemoriesPanel({
           Lived
         </h2>
         <p className="mt-1 text-sm text-ink-soft">
-          {visits.length} visit{visits.length === 1 ? "" : "s"}
+          {entries.length} {entries.length === 1 ? "memory" : "memories"}
         </p>
 
-        {visits.length === 0 ? (
+        <div className="mt-4">
+          <MemorySearch value={query} onChange={setQuery} />
+        </div>
+
+        {entries.length === 0 ? (
           <p className="mt-16 text-center font-display italic text-lg text-ink-soft">
             Nothing here yet — go make one.
           </p>
+        ) : filtered.length === 0 ? (
+          <NoMatchEmptyState query={query} />
         ) : (
           <div className="mt-6 grid grid-cols-2 gap-3">
-            {visits.map((v) => (
+            {filtered.map((entry) => (
               <VisitCard
-                key={v.id}
-                visit={v}
-                ordinal={ordinalById[v.id] ?? 1}
-                onClick={() => onSelect(v.pin_id)}
-                onOpenPhoto={() =>
-                  setLightbox({ photos: v.visit_photos ?? [], index: 0 })
+                key={entry.key}
+                entry={entry}
+                profilesByUser={profilesByUser}
+                onClick={() => onSelect(entry.pinId)}
+                onOpenPhoto={(photos, index) =>
+                  setLightbox({ photos, index })
                 }
               />
             ))}
@@ -396,21 +402,64 @@ function MemoriesPanel({
   );
 }
 
+function NoMatchEmptyState({ query }: { query: string }) {
+  return (
+    <div className="mt-16 flex flex-col items-center justify-center text-center">
+      <p className="font-display italic text-[20px] text-ink">
+        no memories of {query.trim()} yet
+      </p>
+      <p className="mt-2 font-body text-[14px] text-ink-soft">
+        try a different name
+      </p>
+    </div>
+  );
+}
+
 function VisitCard({
-  visit,
-  ordinal,
+  entry,
+  profilesByUser,
   onClick,
   onOpenPhoto,
 }: {
-  visit: VisitWithPin;
-  ordinal: number;
+  entry: LivedEntry;
+  profilesByUser: Record<string, Profile>;
   onClick: () => void;
-  onOpenPhoto: () => void;
+  onOpenPhoto: (photos: VisitPhoto[], index: number) => void;
 }) {
-  const cover = visit.visit_photos?.[0]?.image_url;
-  // Photo region and text region are sibling buttons inside a div so
-  // tapping the photo opens the lightbox while tapping the text
-  // navigates to the pin — no nested-button HTML invalidity.
+  // Merge photos across all visits in the day, ordered by parent
+  // visited_at then photo created_at — same flatten as the day-group
+  // strip in PinDrawer, so the lightbox shows the same set.
+  const photos = useMemo(() => {
+    const flat: { photo: VisitPhoto; visitedAt: string }[] = [];
+    for (const v of entry.visits) {
+      for (const p of v.visit_photos) {
+        flat.push({ photo: p, visitedAt: v.visited_at });
+      }
+    }
+    flat.sort((a, b) => {
+      const t = a.visitedAt.localeCompare(b.visitedAt);
+      if (t !== 0) return t;
+      return a.photo.created_at.localeCompare(b.photo.created_at);
+    });
+    return flat.map((x) => x.photo);
+  }, [entry.visits]);
+  const cover = photos[0]?.image_url;
+
+  // Notes for the day, attributed. VisitNotes hides labels when only
+  // one author wrote, matches the in-drawer treatment.
+  const noteEntries = useMemo<VisitNoteEntry[]>(() => {
+    return entry.visits
+      .filter((v) => v.note?.trim())
+      .map((v) => ({
+        id: v.id,
+        note: v.note!.trim(),
+        authorName: v.created_by
+          ? profilesByUser[v.created_by]?.display_name ?? "Someone"
+          : "Someone",
+        visitedAt: v.visited_at,
+      }));
+  }, [entry.visits, profilesByUser]);
+
   return (
     <div
       className="flex flex-col overflow-hidden rounded-xl bg-surface"
@@ -419,14 +468,14 @@ function VisitCard({
       {cover ? (
         <button
           type="button"
-          onClick={onOpenPhoto}
+          onClick={() => onOpenPhoto(photos, 0)}
           aria-label="View photo"
           className="aspect-square w-full bg-surface"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={cover}
-            alt={visit.pin?.title ?? ""}
+            alt={entry.pinTitle}
             className="h-full w-full object-cover"
           />
         </button>
@@ -440,22 +489,22 @@ function VisitCard({
         onClick={onClick}
         className="flex w-full flex-col text-left"
       >
-      <div className="flex flex-col gap-1 p-3">
-        <div className="text-[10px] uppercase tracking-wider text-accent">
-          {ordinalTimeLabel(ordinal)}
+        <div className="flex flex-col gap-1 p-3">
+          <div className="text-[10px] uppercase tracking-wider text-accent">
+            {ordinalTimeLabel(entry.ordinal)}
+          </div>
+          <div className="line-clamp-1 font-display italic text-[16px] leading-tight text-ink">
+            {entry.pinTitle}
+          </div>
+          {noteEntries.length > 0 && (
+            <div className="max-h-[3.4rem] overflow-hidden">
+              <VisitNotes notes={noteEntries} />
+            </div>
+          )}
+          <div className="mt-1 text-[11px] text-ink-soft">
+            {formatLongDate(entry.visitedAt)}
+          </div>
         </div>
-        <div className="line-clamp-1 font-display italic text-[16px] leading-tight text-ink">
-          {visit.pin?.title ?? "Untitled"}
-        </div>
-        {visit.note && (
-          <p className="line-clamp-2 font-handwritten text-[15px] leading-snug text-ink">
-            {visit.note}
-          </p>
-        )}
-        <div className="mt-1 text-[11px] text-ink-soft">
-          {formatLongDate(visit.visited_at)}
-        </div>
-      </div>
       </button>
     </div>
   );

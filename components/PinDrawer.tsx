@@ -14,6 +14,7 @@ import { Toggle } from "./ui/Toggle";
 import { toast } from "sonner";
 import type { Pin } from "@/hooks/usePins";
 import ImageLightbox from "./ImageLightbox";
+import { VisitNotes, type VisitNoteEntry } from "./ui/VisitNotes";
 import {
   useScrollShadows,
   SCROLL_SHADOW_TOP,
@@ -99,7 +100,6 @@ export function PinContent({
     });
     return m;
   }, [profiles]);
-  const showChips = (profiles?.length ?? 0) >= 2;
 
   const [logFormOpen, setLogFormOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -221,7 +221,6 @@ export function PinContent({
       visits={visits}
       currentUserId={currentUser?.id ?? null}
       profilesByUser={profilesByUser}
-      showChips={showChips}
       onPhotoClick={(photos, index) => setLightbox({ photos, index })}
     />
   ) : null;
@@ -445,13 +444,11 @@ function VisitTimeline({
   visits,
   currentUserId,
   profilesByUser,
-  showChips,
   onPhotoClick,
 }: {
   visits: Visit[];
   currentUserId: string | null;
   profilesByUser: Record<string, Profile>;
-  showChips: boolean;
   onPhotoClick: (photos: VisitPhoto[], index: number) => void;
 }) {
   const groups = useMemo(() => groupVisitsByDate(visits), [visits]);
@@ -477,7 +474,6 @@ function VisitTimeline({
           ordinal={dayOrdinalByDate[g.date] ?? 1}
           currentUserId={currentUserId}
           profilesByUser={profilesByUser}
-          showChips={showChips}
           onPhotoClick={onPhotoClick}
         />
       ))}
@@ -490,7 +486,6 @@ function DayGroupCard({
   ordinal,
   currentUserId,
   profilesByUser,
-  showChips,
   onPhotoClick,
 }: {
   date: string;
@@ -498,25 +493,25 @@ function DayGroupCard({
   ordinal: number;
   currentUserId: string | null;
   profilesByUser: Record<string, Profile>;
-  showChips: boolean;
   onPhotoClick: (photos: VisitPhoto[], index: number) => void;
 }) {
   const [editingVisitId, setEditingVisitId] = useState<string | null>(null);
 
-  // Distinct creators in this day's visits, in first-seen order.
-  const distinctCreators = useMemo(() => {
-    const seen = new Set<string>();
-    const out: { userId: string; name: string }[] = [];
-    for (const v of visits) {
-      if (!v.created_by || seen.has(v.created_by)) continue;
-      seen.add(v.created_by);
-      const p = profilesByUser[v.created_by];
-      out.push({
-        userId: v.created_by,
-        name: p?.display_name ?? "Someone",
-      });
-    }
-    return out;
+  // One entry per visit-with-note for this day, attributed to whoever
+  // created that visit. VisitNotes itself decides whether to render
+  // labels — single-note days get plain handwriting, multi-note days
+  // get author labels and dividers.
+  const noteEntries = useMemo<VisitNoteEntry[]>(() => {
+    return visits
+      .filter((v) => v.note?.trim())
+      .map((v) => ({
+        id: v.id,
+        note: v.note!.trim(),
+        authorName: v.created_by
+          ? profilesByUser[v.created_by]?.display_name ?? "Someone"
+          : "Someone",
+        visitedAt: v.visited_at,
+      }));
   }, [visits, profilesByUser]);
 
   // All photos across all visits in this day, ordered by parent
@@ -536,14 +531,13 @@ function DayGroupCard({
     return flat.map((x) => x.photo);
   }, [visits]);
 
-  const visitsWithNotes = visits.filter((v) => v.note?.trim());
   const editingVisit =
     editingVisitId != null
       ? visits.find((v) => v.id === editingVisitId) ?? null
       : null;
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-4">
       <div className="flex items-start justify-between">
         <div>
           <div className="text-[11px] uppercase tracking-wider text-ink-soft">
@@ -564,42 +558,13 @@ function DayGroupCard({
         />
       </div>
 
-      {showChips && distinctCreators.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {distinctCreators.map((c) => (
-            <span
-              key={c.userId}
-              className="rounded-full bg-surface px-2 py-0.5 font-body italic text-[12px] text-ink"
-              style={{ border: "0.5px solid var(--border)" }}
-            >
-              {c.name}
-            </span>
-          ))}
-        </div>
-      )}
-
       {editingVisit ? (
         <EditNoteInline
           visit={editingVisit}
           onDone={() => setEditingVisitId(null)}
         />
       ) : (
-        visitsWithNotes.length > 0 && (
-          <div className="flex flex-col gap-2">
-            {visitsWithNotes.map((v) => (
-              <p
-                key={v.id}
-                className="font-handwritten text-[16px] leading-snug text-ink"
-                style={{
-                  transform: "rotate(-1deg)",
-                  transformOrigin: "left top",
-                }}
-              >
-                {v.note}
-              </p>
-            ))}
-          </div>
-        )
+        noteEntries.length > 0 && <VisitNotes notes={noteEntries} />
       )}
 
       {photos.length > 0 && (

@@ -6,8 +6,12 @@ import { PinContent } from "@/components/PinDrawer";
 import { AddPinForm } from "@/components/AddPinDrawer";
 import { PreviewBody } from "@/components/PlacePreviewSheet";
 import ImageLightbox from "@/components/ImageLightbox";
+import { MemorySearch } from "@/components/ui/MemorySearch";
 import { usePins, type Pin } from "@/hooks/usePins";
-import { useAllVisits, type VisitWithPin } from "@/hooks/useAllVisits";
+import {
+  useLivedEntries,
+  type LivedEntry,
+} from "@/hooks/useLivedEntries";
 import type { VisitPhoto } from "@/hooks/usePinVisits";
 import { formatLongDate } from "@/lib/format";
 import type { ResolvedPlace } from "@/components/SearchControl";
@@ -372,44 +376,56 @@ function LivedPill() {
 // ============================================================
 
 function LivedList({ onSelectPin }: { onSelectPin: (id: string) => void }) {
-  const { data: visits, isLoading } = useAllVisits();
-
-  // Lightbox is owned at the list level so opening a photo doesn't
-  // depend on hover state or row focus. One visit's photos at a time.
+  const { entries, isLoading } = useLivedEntries();
+  const [query, setQuery] = useState("");
   const [lightbox, setLightbox] = useState<{
     photos: VisitPhoto[];
     index: number;
   } | null>(null);
 
-  if (isLoading) {
-    return (
-      <p className="px-5 py-6 font-display italic text-sm text-ink-soft">
-        loading…
-      </p>
-    );
-  }
-  if (!visits || visits.length === 0) {
-    return (
-      <p className="px-5 py-10 text-center font-display italic text-base text-ink-soft">
-        Nothing here yet — go make one.
-      </p>
-    );
-  }
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return entries;
+    return entries.filter((e) => e.pinTitle.toLowerCase().includes(q));
+  }, [query, entries]);
 
   return (
     <>
-      <ul className="flex flex-col py-1">
-        {visits.map((v) => (
-          <VisitRow
-            key={v.id}
-            visit={v}
-            onClick={() => onSelectPin(v.pin_id)}
-            onOpenPhoto={() =>
-              setLightbox({ photos: v.visit_photos, index: 0 })
-            }
-          />
-        ))}
-      </ul>
+      <div className="px-4 pt-3">
+        <MemorySearch value={query} onChange={setQuery} />
+      </div>
+
+      {isLoading ? (
+        <p className="px-5 py-6 font-display italic text-sm text-ink-soft">
+          loading…
+        </p>
+      ) : entries.length === 0 ? (
+        <p className="px-5 py-10 text-center font-display italic text-base text-ink-soft">
+          Nothing here yet — go make one.
+        </p>
+      ) : filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center px-5 py-10 text-center">
+          <p className="font-display italic text-[18px] text-ink">
+            no memories of {query.trim()} yet
+          </p>
+          <p className="mt-1.5 font-body text-[13px] text-ink-soft">
+            try a different name
+          </p>
+        </div>
+      ) : (
+        <ul className="flex flex-col py-2">
+          {filtered.map((entry) => (
+            <VisitRow
+              key={entry.key}
+              entry={entry}
+              onClick={() => onSelectPin(entry.pinId)}
+              onOpenPhoto={(photos, index) =>
+                setLightbox({ photos, index })
+              }
+            />
+          ))}
+        </ul>
+      )}
 
       <ImageLightbox
         photos={(lightbox?.photos ?? []).map((p) => ({
@@ -424,27 +440,42 @@ function LivedList({ onSelectPin }: { onSelectPin: (id: string) => void }) {
 }
 
 function VisitRow({
-  visit,
+  entry,
   onClick,
   onOpenPhoto,
 }: {
-  visit: VisitWithPin;
+  entry: LivedEntry;
   onClick: () => void;
-  onOpenPhoto: () => void;
+  onOpenPhoto: (photos: VisitPhoto[], index: number) => void;
 }) {
-  const cover = visit.visit_photos[0]?.image_url;
-  // Same split-button pattern as mobile VisitCard: photo opens the
-  // lightbox, the rest of the row navigates to the pin.
+  // Merged photos across the day, same shape the lightbox in
+  // PinDrawer's day group uses, so opening here matches there.
+  const photos = useMemo(() => {
+    const flat: { photo: VisitPhoto; visitedAt: string }[] = [];
+    for (const v of entry.visits) {
+      for (const p of v.visit_photos) {
+        flat.push({ photo: p, visitedAt: v.visited_at });
+      }
+    }
+    flat.sort((a, b) => {
+      const t = a.visitedAt.localeCompare(b.visitedAt);
+      if (t !== 0) return t;
+      return a.photo.created_at.localeCompare(b.photo.created_at);
+    });
+    return flat.map((x) => x.photo);
+  }, [entry.visits]);
+  const cover = photos[0]?.image_url;
+
   return (
     <li className="flex items-center gap-3 px-[14px] py-3 hover:bg-ink/5">
       {cover ? (
         <button
           type="button"
-          onClick={onOpenPhoto}
+          onClick={() => onOpenPhoto(photos, 0)}
           aria-label="View photo"
           className="shrink-0"
         >
-          <Thumb src={cover} alt={visit.pin?.title ?? ""} />
+          <Thumb src={cover} alt={entry.pinTitle} />
         </button>
       ) : (
         <Thumb src={undefined} alt="" />
@@ -455,10 +486,10 @@ function VisitRow({
         className="min-w-0 flex-1 text-left"
       >
         <div className="truncate font-display text-[16px] leading-tight text-ink">
-          {visit.pin?.title ?? "Untitled"}
+          {entry.pinTitle}
         </div>
         <div className="mt-0.5 truncate font-handwritten italic text-[13px] text-ink-soft">
-          {formatLongDate(visit.visited_at)}
+          {formatLongDate(entry.visitedAt)}
         </div>
       </button>
     </li>
