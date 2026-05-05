@@ -4,7 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { MapPin } from "lucide-react";
 import Map, { type LatLng, type MapHandle } from "@/components/Map";
 import PinDrawer, { ordinalTimeLabel } from "@/components/PinDrawer";
+import ImageLightbox from "@/components/ImageLightbox";
 import { MemorySearch } from "@/components/ui/MemorySearch";
+import type { VisitPhoto } from "@/hooks/usePinVisits";
 import { useLivedEntries, type LivedEntry } from "@/hooks/useLivedEntries";
 import { useProfiles, type Profile } from "@/hooks/useProfiles";
 import AddPinDrawer from "@/components/AddPinDrawer";
@@ -251,24 +253,32 @@ export default function Home() {
   }
 
   // ============================================================
-  // Mobile layout (unchanged)
+  // Mobile layout
   // ============================================================
+  // Map and Lived live as sibling flex children so the BottomNav (last
+  // child of <main>) is always reachable. Map stays mounted under
+  // display:none while Lived is active so Mapbox doesn't reinitialize.
   return (
-    <main className="relative flex flex-1">
-      <Map
-        ref={mapHandle}
-        onMarkerClick={handleMarkerClick}
-        onMapClick={handleMapClick}
-        pendingLatLng={isAddOpen ? pendingLatLng : null}
-        previewLatLng={
-          previewPlace
-            ? { lat: previewPlace.lat, lng: previewPlace.lng }
-            : null
-        }
-        selectedLatLng={selectedLatLng}
-        recentlyAddedId={recentlyAddedId}
-        mapLocked={mapLocked}
-      />
+    <main className="relative flex flex-1 flex-col">
+      <div
+        className="relative flex-1"
+        style={{ display: isMemories ? "none" : "flex" }}
+      >
+        <Map
+          ref={mapHandle}
+          onMarkerClick={handleMarkerClick}
+          onMapClick={handleMapClick}
+          pendingLatLng={isAddOpen ? pendingLatLng : null}
+          previewLatLng={
+            previewPlace
+              ? { lat: previewPlace.lat, lng: previewPlace.lng }
+              : null
+          }
+          selectedLatLng={selectedLatLng}
+          recentlyAddedId={recentlyAddedId}
+          mapLocked={mapLocked}
+        />
+      </div>
 
       {isMap && (
         <SearchControl
@@ -321,7 +331,10 @@ export default function Home() {
         onClose={() => setSettingsOpen(false)}
       />
 
-      {isMemories && <MemoriesPanel onSelect={setSelectedPinId} />}
+      <MemoriesPanel
+        onSelect={setSelectedPinId}
+        hidden={!isMemories}
+      />
 
       <BottomNav
         active={activeTab}
@@ -334,12 +347,22 @@ export default function Home() {
 
 function MemoriesPanel({
   onSelect,
+  hidden,
 }: {
   onSelect: (pinId: string) => void;
+  hidden: boolean;
 }) {
   const { entries } = useLivedEntries();
   const { data: profiles } = useProfiles();
   const [query, setQuery] = useState("");
+
+  // Lightbox photos are merged across the entry's visits in
+  // chronological order — same as the day-group strip in PinDrawer,
+  // so opening a card's photo navigates the entire day's roll.
+  const [lightbox, setLightbox] = useState<{
+    photos: VisitPhoto[];
+    index: number;
+  } | null>(null);
 
   const profilesByUser = useMemo(() => {
     const m: Record<string, Profile> = {};
@@ -355,42 +378,75 @@ function MemoriesPanel({
     return entries.filter((e) => e.pinTitle.toLowerCase().includes(q));
   }, [query, entries]);
 
+  // Two-layer container. The OUTER div is the flex item that takes its
+  // share of <main>'s height (flex-1 + min-h-0) and clips with
+  // overflow:hidden — without min-h-0 a column flex item defaults to
+  // min-height:auto and grows to fit all content, defeating scroll.
+  // The INNER div is the actual scroll container (h-full +
+  // overflow-y:auto). Combining wrapper + scroller into one element
+  // breaks momentum scroll on iOS when the same element is also a
+  // column flex container, which is why this is split.
   return (
     <div
-      className="absolute inset-x-0 bottom-0 top-0 z-30 overflow-y-auto bg-bg pb-28 pt-[max(env(safe-area-inset-top),1.5rem)]"
-      style={{ overscrollBehavior: "contain", touchAction: "pan-y" }}
+      className="relative flex-1 min-h-0 bg-bg"
+      style={{
+        display: hidden ? "none" : "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+      }}
     >
-      <div className="mx-auto max-w-3xl px-4">
-        <h2 className="font-display italic text-[22px] font-medium text-ink">
-          Lived
-        </h2>
-        <p className="mt-1 text-sm text-ink-soft">
-          {entries.length} {entries.length === 1 ? "memory" : "memories"}
-        </p>
-
-        <div className="mt-4">
-          <MemorySearch value={query} onChange={setQuery} />
-        </div>
-
-        {entries.length === 0 ? (
-          <p className="mt-16 text-center font-display italic text-lg text-ink-soft">
-            Nothing here yet — go make one.
+      <div
+        className="h-full w-full overflow-y-auto pt-[max(env(safe-area-inset-top),1.5rem)]"
+        style={{
+          WebkitOverflowScrolling: "touch",
+          paddingBottom: "calc(72px + env(safe-area-inset-bottom))",
+          overscrollBehavior: "contain",
+        }}
+      >
+        <div className="mx-auto max-w-3xl px-4">
+          <h2 className="font-display italic text-[22px] font-medium text-ink">
+            Lived
+          </h2>
+          <p className="mt-1 text-sm text-ink-soft">
+            {entries.length} {entries.length === 1 ? "memory" : "memories"}
           </p>
-        ) : filtered.length === 0 ? (
-          <NoMatchEmptyState query={query} />
-        ) : (
-          <div className="mt-6 grid grid-cols-2 gap-3">
-            {filtered.map((entry) => (
-              <VisitCard
-                key={entry.key}
-                entry={entry}
-                profilesByUser={profilesByUser}
-                onClick={() => onSelect(entry.pinId)}
-              />
-            ))}
+
+          <div className="mt-4">
+            <MemorySearch value={query} onChange={setQuery} />
           </div>
-        )}
+
+          {entries.length === 0 ? (
+            <p className="mt-16 text-center font-display italic text-lg text-ink-soft">
+              Nothing here yet — go make one.
+            </p>
+          ) : filtered.length === 0 ? (
+            <NoMatchEmptyState query={query} />
+          ) : (
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              {filtered.map((entry) => (
+                <VisitCard
+                  key={entry.key}
+                  entry={entry}
+                  profilesByUser={profilesByUser}
+                  onClick={() => onSelect(entry.pinId)}
+                  onOpenPhoto={(photos, index) =>
+                    setLightbox({ photos, index })
+                  }
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
+
+      <ImageLightbox
+        photos={(lightbox?.photos ?? []).map((p) => ({
+          url: p.image_url,
+        }))}
+        initialIndex={lightbox?.index ?? 0}
+        open={lightbox != null}
+        onClose={() => setLightbox(null)}
+      />
     </div>
   );
 }
@@ -410,9 +466,11 @@ function NoMatchEmptyState({ query }: { query: string }) {
 
 // VisitCard — fixed-dimension preview tile for the Lived grid.
 // Every card is exactly 280px tall with a 140px photo strip on top
-// and 140px clipped content beneath. Long titles, long notes, and
-// extra-author labels all truncate here so the grid never grows
-// uneven rows. Tap the card to read the full memory in PinDrawer.
+// and 140px clipped content beneath, so the grid stays uniform no
+// matter how long titles or notes get. Two distinct tap targets:
+// the photo opens the lightbox (chronological roll across the day's
+// visits), the body opens the pin detail. Outer wrapper is a div
+// because nested buttons aren't valid.
 const CARD_HEIGHT = 280;
 const PHOTO_HEIGHT = 140;
 
@@ -420,17 +478,31 @@ function VisitCard({
   entry,
   profilesByUser,
   onClick,
+  onOpenPhoto,
 }: {
   entry: LivedEntry;
   profilesByUser: Record<string, Profile>;
   onClick: () => void;
+  onOpenPhoto: (photos: VisitPhoto[], index: number) => void;
 }) {
-  const cover = useMemo(() => {
+  // Merge photos across all visits in the day, ordered by parent
+  // visited_at then photo created_at — same flatten as the day-group
+  // strip in PinDrawer, so the lightbox shows the same set.
+  const photos = useMemo(() => {
+    const flat: { photo: VisitPhoto; visitedAt: string }[] = [];
     for (const v of entry.visits) {
-      for (const p of v.visit_photos) return p.image_url;
+      for (const p of v.visit_photos) {
+        flat.push({ photo: p, visitedAt: v.visited_at });
+      }
     }
-    return undefined;
+    flat.sort((a, b) => {
+      const t = a.visitedAt.localeCompare(b.visitedAt);
+      if (t !== 0) return t;
+      return a.photo.created_at.localeCompare(b.photo.created_at);
+    });
+    return flat.map((x) => x.photo);
   }, [entry.visits]);
+  const cover = photos[0]?.image_url;
 
   // First non-empty note in the day — single visit days hand back
   // their only note, multi-visit days surface the earliest one. The
@@ -458,10 +530,8 @@ function VisitCard({
   }, [entry.visits, profilesByUser]);
 
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex flex-col rounded-xl bg-surface text-left"
+    <div
+      className="flex flex-col rounded-xl bg-surface"
       style={{
         height: CARD_HEIGHT,
         overflow: "hidden",
@@ -469,7 +539,10 @@ function VisitCard({
       }}
     >
       {cover ? (
-        <div
+        <button
+          type="button"
+          onClick={() => onOpenPhoto(photos, 0)}
+          aria-label="View photo"
           className="w-full shrink-0 bg-surface"
           style={{ height: PHOTO_HEIGHT }}
         >
@@ -479,7 +552,7 @@ function VisitCard({
             alt={entry.pinTitle}
             className="h-full w-full object-cover"
           />
-        </div>
+        </button>
       ) : (
         <div
           className="flex w-full shrink-0 items-center justify-center bg-surface"
@@ -492,8 +565,10 @@ function VisitCard({
           />
         </div>
       )}
-      <div
-        className="flex w-full flex-col"
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex w-full flex-col text-left"
         style={{
           height: CARD_HEIGHT - PHOTO_HEIGHT,
           padding: "10px 12px",
@@ -541,7 +616,7 @@ function VisitCard({
         >
           {formatLongDate(entry.visitedAt)}
         </div>
-      </div>
-    </button>
+      </button>
+    </div>
   );
 }
