@@ -74,11 +74,14 @@ function arrayBufferToBase64Url(buf: ArrayBuffer | null): string {
 }
 
 async function getOrRegisterSW(): Promise<ServiceWorkerRegistration> {
-  // navigator.serviceWorker.ready resolves when there's *any* active
-  // SW. If we haven't registered yet, register first.
+  // register() resolves while the SW is still `installing`; subscribing
+  // before it becomes `active` throws on first run. ready waits for an
+  // active worker in the page's scope.
   const existing = await navigator.serviceWorker.getRegistration("/sw.js");
-  if (existing) return existing;
-  return navigator.serviceWorker.register("/sw.js", { scope: "/" });
+  if (!existing) {
+    await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+  }
+  return navigator.serviceWorker.ready;
 }
 
 // Subscribe the current browser to push and persist the subscription

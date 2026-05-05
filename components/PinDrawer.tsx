@@ -2,7 +2,7 @@
 
 import { Drawer } from "vaul";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { uploadPhoto } from "@/lib/upload";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -10,11 +10,15 @@ import { useProfiles, type Profile } from "@/hooks/useProfiles";
 import { usePinVisits, type Visit, type VisitPhoto } from "@/hooks/usePinVisits";
 import type { VisitWithPin } from "@/hooks/useAllVisits";
 import { formatLongDate } from "@/lib/format";
+import { findUrlInText, stripUrlFromText } from "@/lib/inspiration-url";
 import { Toggle } from "./ui/Toggle";
+import LinkPreview from "./ui/LinkPreview";
 import { toast } from "sonner";
 import type { Pin } from "@/hooks/usePins";
-import ImageLightbox from "./ImageLightbox";
+import ImageLightbox, { type LightboxPhoto } from "./ImageLightbox";
 import { VisitNotes, type VisitNoteEntry } from "./ui/VisitNotes";
+import { PreviewPhoto, ReviewCard } from "./PlacePreviewSheet";
+import { fetchGooglePlaceDetails } from "@/lib/google-place-details";
 import {
   useScrollShadows,
   SCROLL_SHADOW_TOP,
@@ -53,6 +57,14 @@ export default function PinDrawer({ pin, onClose, readOnly = false }: Props) {
           style={{ borderTop: "1px solid var(--border)" }}
         >
           <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-ink-soft/40" />
+          {/* Vaul wraps Content in a Radix Dialog under the hood; without
+              a Title, screen readers announce "dialog" with no label and
+              Radix logs the dev warning. The visible <h2> in PinContent
+              already carries the pin name, so this title is sr-only and
+              just mirrors it for assistive tech. */}
+          <Drawer.Title className="sr-only">
+            {pin?.title ?? "Pin"}
+          </Drawer.Title>
           {pin && (
             <PinContent
               layout="drawer"
@@ -103,19 +115,52 @@ export function PinContent({
 
   const [logFormOpen, setLogFormOpen] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // Per-open dismissal of the "we found a link in your note" banner.
+  // Resets when the user opens a different pin so each pin gets one
+  // chance to migrate per session, never nagged after dismissal.
+  const [migrationDismissed, setMigrationDismissed] = useState(false);
+  const [migratingUrl, setMigratingUrl] = useState(false);
   // Lightbox holds the *exact* photo array currently being shown plus
   // the active index. The array is the day-group's flat list (across
   // visits in that day) so navigation is contiguous within the strip
-  // the user opened from.
+  // the user opened from. Stored as LightboxPhoto so the same state
+  // serves both visit photos and (for pre-lived pins) Google photos.
   const [lightbox, setLightbox] = useState<{
-    photos: VisitPhoto[];
+    photos: LightboxPhoto[];
     index: number;
   } | null>(null);
 
   useEffect(() => {
     setLogFormOpen(false);
     setConfirmingDelete(false);
+    setMigrationDismissed(false);
   }, [pin.id]);
+
+  // Migrate a URL the user typed into the note into the dedicated
+  // inspiration_url column. Only invoked when they accept the banner
+  // — RLS still applies, so a partner who can't write the row sees a
+  // toast and the note is left as-is.
+  async function acceptUrlMigration(extractedUrl: string) {
+    setMigratingUrl(true);
+    try {
+      const supabase = createClient();
+      const cleanedNote = stripUrlFromText(pin.note, extractedUrl);
+      const { error } = await supabase
+        .from("pins")
+        .update({
+          inspiration_url: extractedUrl,
+          note: cleanedNote || null,
+        })
+        .eq("id", pin.id);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["pins"] });
+    } catch {
+      toast.error("Couldn't move that link — try again later.");
+      setMigrationDismissed(true);
+    } finally {
+      setMigratingUrl(false);
+    }
+  }
 
   useEffect(() => {
     if (!confirmingDelete) return;
@@ -216,14 +261,57 @@ export function PinContent({
     </p>
   ) : null;
 
+  // Inspiration link slot. Three exclusive states:
+  //   1. inspiration_url present  → label + LinkPreview card
+  //   2. URL detected in note     → migration banner ("move it?")
+  //   3. neither                  → nothing rendered, no space taken
+  //
+  // The card sits between the note and the "We did it" toggle, with
+  // 12px breathing room top and bottom (mt-3 / mb-3).
+  const detectedUrlInNote = !pin.inspiration_url
+    ? findUrlInText(pin.note)
+    : null;
+
+  const inspirationBlock = pin.inspiration_url ? (
+    <div className="mt-3 mb-3 flex flex-col gap-1.5">
+      <p
+        className="font-display italic text-[12px]"
+        style={{ color: "var(--ink-soft)" }}
+      >
+        what inspired this
+      </p>
+      <LinkPreview url={pin.inspiration_url} />
+    </div>
+  ) : detectedUrlInNote && !migrationDismissed && !readOnly ? (
+    <UrlMigrationBanner
+      detectedUrl={detectedUrlInNote}
+      busy={migratingUrl}
+      onAccept={() => acceptUrlMigration(detectedUrlInNote)}
+      onDismiss={() => setMigrationDismissed(true)}
+    />
+  ) : null;
+
   const timeline = hasVisits ? (
     <VisitTimeline
       visits={visits}
       currentUserId={currentUser?.id ?? null}
       profilesByUser={profilesByUser}
-      onPhotoClick={(photos, index) => setLightbox({ photos, index })}
+      onPhotoClick={(photos, index) =>
+        setLightbox({
+          photos: photos.map((p) => ({ url: p.image_url, alt: pin.title })),
+          index,
+        })
+      }
     />
   ) : null;
+
+  const prelivedPlace =
+    !hasVisits && pin.google_place_id ? (
+      <PrelivedPlaceBlock
+        placeId={pin.google_place_id}
+        onOpenPhotos={(photos, index) => setLightbox({ photos, index })}
+      />
+    ) : null;
 
   const toggleRow =
     !readOnly && !hasVisits ? (
@@ -289,10 +377,7 @@ export function PinContent({
 
   const lightboxNode = (
     <ImageLightbox
-      photos={(lightbox?.photos ?? []).map((p) => ({
-        url: p.image_url,
-        alt: pin.title,
-      }))}
+      photos={lightbox?.photos ?? []}
       initialIndex={lightbox?.index ?? 0}
       open={lightbox != null}
       onClose={() => setLightbox(null)}
@@ -306,7 +391,9 @@ export function PinContent({
       <div className="overflow-y-auto px-6 pb-8 pt-4">
         {title}
         {note}
+        {inspirationBlock}
         {timeline}
+        {prelivedPlace}
         {toggleRow}
         {logForm}
         {logAnotherButton && (
@@ -331,12 +418,76 @@ export function PinContent({
       <div className="px-6 pb-6 pt-4">
         {title}
         {note}
+        {inspirationBlock}
         {timeline}
+        {prelivedPlace}
         {toggleRow}
         {logForm}
       </div>
       {lightboxNode}
     </PanelLayout>
+  );
+}
+
+// ============================================================
+// Inline banner for legacy pins whose note still contains a URL.
+// Asks the user once per open before touching the row — silent
+// auto-migration would feel invasive and they may have written
+// the URL on purpose as part of the prose.
+// ============================================================
+
+function UrlMigrationBanner({
+  detectedUrl,
+  busy,
+  onAccept,
+  onDismiss,
+}: {
+  detectedUrl: string;
+  busy: boolean;
+  onAccept: () => void;
+  onDismiss: () => void;
+}) {
+  const hostname = useMemo(() => {
+    try {
+      return new URL(detectedUrl).hostname.replace(/^www\./, "");
+    } catch {
+      return detectedUrl;
+    }
+  }, [detectedUrl]);
+
+  return (
+    <div
+      className="mt-3 mb-3 flex flex-col gap-2.5 rounded-xl px-4 py-3"
+      style={{
+        border: "1px solid var(--accent-2)",
+        backgroundColor: "color-mix(in srgb, var(--accent-2) 10%, transparent)",
+      }}
+    >
+      <p className="text-[14px] text-ink">
+        we found a link in your note —
+        <span className="ml-1 font-display italic">{hostname}</span>.
+        Move it to the inspiration field?
+      </p>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <button
+          type="button"
+          onClick={onAccept}
+          disabled={busy}
+          className="h-9 flex-1 rounded-lg bg-accent-2 font-display italic text-[14px] text-bg disabled:opacity-50"
+        >
+          {busy ? "moving…" : "Yes, move it"}
+        </button>
+        <button
+          type="button"
+          onClick={onDismiss}
+          disabled={busy}
+          className="h-9 flex-1 rounded-lg text-[14px] text-ink-soft disabled:opacity-50"
+          style={{ border: "1px solid var(--border)" }}
+        >
+          No, leave it
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -1188,6 +1339,76 @@ function PendingPhotoThumb({
         >
           ×
         </button>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// Pre-lived: Google Places photos + reviews until first visit
+// ============================================================
+
+// Renders a horizontal photo strip and up to 5 reviews fetched from
+// Google for this pin's `google_place_id`. Only shown before the
+// couple logs their first visit — once they do, their own memories
+// take over the drawer body. Cached for 24h via React Query so
+// re-opening the same pin doesn't re-bill the Places API.
+function PrelivedPlaceBlock({
+  placeId,
+  onOpenPhotos,
+}: {
+  placeId: string;
+  onOpenPhotos: (photos: LightboxPhoto[], index: number) => void;
+}) {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["google-place", placeId],
+    queryFn: () => fetchGooglePlaceDetails(placeId),
+    staleTime: 1000 * 60 * 60 * 24,
+    gcTime: 1000 * 60 * 60 * 24,
+    retry: 1,
+  });
+
+  if (isLoading) {
+    return (
+      <p className="mt-6 font-display italic text-[14px] text-ink-soft">
+        loading place details…
+      </p>
+    );
+  }
+  if (isError || !data) return null;
+  if (data.photos.length === 0 && data.reviews.length === 0) return null;
+
+  const lightboxPhotos: LightboxPhoto[] = data.photos.map((p) => {
+    const ref = encodeURIComponent(p.ref);
+    return {
+      url: `/api/place-photo?ref=${ref}&size=full`,
+      thumbnailUrl: `/api/place-photo?ref=${ref}&size=thumb`,
+      attribution: p.attribution,
+    };
+  });
+
+  return (
+    <div className="mt-6 flex flex-col gap-4">
+      <h3 className="font-display italic text-[14px] text-ink-soft">
+        From the world
+      </h3>
+      {data.photos.length > 0 && (
+        <div className="-mx-6 flex gap-2 overflow-x-auto px-6">
+          {data.photos.map((p, i) => (
+            <PreviewPhoto
+              key={p.ref}
+              ref_={p.ref}
+              onClick={() => onOpenPhotos(lightboxPhotos, i)}
+            />
+          ))}
+        </div>
+      )}
+      {data.reviews.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {data.reviews.map((r, i) => (
+            <ReviewCard key={i} review={r} />
+          ))}
+        </div>
       )}
     </div>
   );

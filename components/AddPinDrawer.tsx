@@ -8,6 +8,11 @@ import { useSpaces } from "@/hooks/useSpaces";
 import { usePins } from "@/hooks/usePins";
 import { findExistingPin } from "@/lib/geo";
 import {
+  findUrlInText,
+  isValidUrl,
+  stripUrlFromText,
+} from "@/lib/inspiration-url";
+import {
   useScrollShadows,
   SCROLL_SHADOW_TOP,
   SCROLL_SHADOW_BOTTOM,
@@ -16,6 +21,9 @@ import {
 interface BaseProps {
   pendingLatLng: { lat: number; lng: number } | null;
   prefillTitle?: string;
+  // Google place id captured from the search → preview flow. Stored on
+  // the pin so its pre-lived drawer can re-fetch photos/reviews later.
+  prefillPlaceId?: string | null;
   onClose: () => void;
   onSubmitted: (newPinId: string) => void;
   onOpenExistingPin?: (pinId: string) => void;
@@ -50,6 +58,7 @@ export default function AddPinDrawer(props: DrawerProps) {
             <AddPinForm
               pendingLatLng={props.pendingLatLng}
               prefillTitle={props.prefillTitle}
+              prefillPlaceId={props.prefillPlaceId}
               onClose={props.onClose}
               onSubmitted={props.onSubmitted}
               onOpenExistingPin={props.onOpenExistingPin}
@@ -72,6 +81,7 @@ interface FormProps extends BaseProps {
 export function AddPinForm({
   pendingLatLng,
   prefillTitle,
+  prefillPlaceId,
   onClose,
   onSubmitted,
   onOpenExistingPin,
@@ -79,6 +89,7 @@ export function AddPinForm({
 }: FormProps) {
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
+  const [inspirationUrl, setInspirationUrl] = useState("");
   const [acknowledgedDuplicate, setAcknowledgedDuplicate] = useState(false);
   const queryClient = useQueryClient();
   const { data: spaces } = useSpaces();
@@ -96,6 +107,7 @@ export function AddPinForm({
   useEffect(() => {
     setTitle(prefillTitle ?? "");
     setNote("");
+    setInspirationUrl("");
     setAcknowledgedDuplicate(false);
   }, [prefillTitle]);
 
@@ -112,14 +124,31 @@ export function AddPinForm({
       const {
         data: { user },
       } = await supabase.auth.getUser();
+
+      // If the explicit field is empty but the user pasted a URL into
+      // the note, pull it out and write it to the dedicated column.
+      // Keeps the Chairman-FU flow on the happy path automatically
+      // when someone is mid-flow re-pinning that place.
+      let finalNote = note.trim();
+      let finalUrl = inspirationUrl.trim();
+      if (!finalUrl) {
+        const found = findUrlInText(finalNote);
+        if (found) {
+          finalUrl = found;
+          finalNote = stripUrlFromText(finalNote, found);
+        }
+      }
+
       const { data, error } = await supabase
         .from("pins")
         .insert({
           space_id: spaceId,
           title: title.trim(),
-          note: note.trim() || null,
+          note: finalNote || null,
           lat: pendingLatLng.lat,
           lng: pendingLatLng.lng,
+          google_place_id: prefillPlaceId ?? null,
+          inspiration_url: finalUrl || null,
           created_by: user?.id ?? null,
         })
         .select("id")
@@ -167,6 +196,11 @@ export function AddPinForm({
     </div>
   );
 
+  // URL is optional and we never block save on a malformed entry —
+  // the warning is information, not a gate. Empty stays empty.
+  const trimmedUrl = inspirationUrl.trim();
+  const showUrlWarning = trimmedUrl.length > 0 && !isValidUrl(trimmedUrl);
+
   const fields = (
     <>
       <input
@@ -186,6 +220,40 @@ export function AddPinForm({
         className="w-full resize-none rounded-lg bg-bg px-4 py-3 text-base text-ink outline-none placeholder:text-ink-soft"
         style={{ border: "1px solid var(--border)" }}
       />
+      <div className="flex flex-col gap-1.5">
+        <label
+          htmlFor="add-pin-inspiration"
+          className="font-display italic text-[14px]"
+          style={{ color: "var(--ink-soft)" }}
+        >
+          saw it somewhere?
+        </label>
+        <input
+          id="add-pin-inspiration"
+          type="url"
+          inputMode="url"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          value={inspirationUrl}
+          onChange={(e) => setInspirationUrl(e.target.value)}
+          placeholder="paste a link..."
+          className="h-12 w-full rounded-lg bg-bg px-4 text-[14px] text-ink outline-none placeholder:text-ink-soft"
+          style={{ border: "1px solid var(--border)" }}
+        />
+        {showUrlWarning && (
+          <p
+            className="font-handwritten text-[14px]"
+            style={{
+              color: "var(--accent)",
+              transform: "rotate(-0.5deg)",
+              transformOrigin: "left top",
+            }}
+          >
+            that doesn&apos;t look like a link
+          </p>
+        )}
+      </div>
     </>
   );
 

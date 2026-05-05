@@ -14,6 +14,8 @@ type RawPin = {
   done_at: string | null;
   memory: string | null;
   image_urls: string[] | null;
+  google_place_id: string | null;
+  inspiration_url: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -31,6 +33,8 @@ export type Pin = {
   done_at: string | null;
   memory: string | null;
   image_urls: string[];
+  google_place_id: string | null;
+  inspiration_url: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;

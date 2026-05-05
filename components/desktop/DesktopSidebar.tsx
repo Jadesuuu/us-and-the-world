@@ -5,14 +5,12 @@ import { ChevronLeft, MapPin } from "lucide-react";
 import { PinContent } from "@/components/PinDrawer";
 import { AddPinForm } from "@/components/AddPinDrawer";
 import { PreviewBody } from "@/components/PlacePreviewSheet";
-import ImageLightbox from "@/components/ImageLightbox";
 import { MemorySearch } from "@/components/ui/MemorySearch";
 import { usePins, type Pin } from "@/hooks/usePins";
 import {
   useLivedEntries,
   type LivedEntry,
 } from "@/hooks/useLivedEntries";
-import type { VisitPhoto } from "@/hooks/usePinVisits";
 import { formatLongDate } from "@/lib/format";
 import type { ResolvedPlace } from "@/components/SearchControl";
 import type { LatLng } from "@/components/Map";
@@ -30,6 +28,7 @@ interface Props {
   isAddOpen: boolean;
   pendingLatLng: LatLng | null;
   pendingPrefillTitle: string;
+  pendingPrefillPlaceId: string | null;
   previewPlace: ResolvedPlace | null;
 
   onSelectPin: (pinId: string) => void;
@@ -48,6 +47,7 @@ export default function DesktopSidebar(props: Props) {
     isAddOpen,
     pendingLatLng,
     pendingPrefillTitle,
+    pendingPrefillPlaceId,
     previewPlace,
     onSelectPin,
     onCloseDetail,
@@ -102,6 +102,7 @@ export default function DesktopSidebar(props: Props) {
             layout="panel"
             pendingLatLng={pendingLatLng}
             prefillTitle={pendingPrefillTitle || undefined}
+            prefillPlaceId={pendingPrefillPlaceId}
             onClose={onCloseAdd}
             onSubmitted={onSubmittedAdd}
             onOpenExistingPin={onOpenExistingFromAdd}
@@ -378,10 +379,6 @@ function LivedPill() {
 function LivedList({ onSelectPin }: { onSelectPin: (id: string) => void }) {
   const { entries, isLoading } = useLivedEntries();
   const [query, setQuery] = useState("");
-  const [lightbox, setLightbox] = useState<{
-    photos: VisitPhoto[];
-    index: number;
-  } | null>(null);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -419,77 +416,64 @@ function LivedList({ onSelectPin }: { onSelectPin: (id: string) => void }) {
               key={entry.key}
               entry={entry}
               onClick={() => onSelectPin(entry.pinId)}
-              onOpenPhoto={(photos, index) =>
-                setLightbox({ photos, index })
-              }
             />
           ))}
         </ul>
       )}
-
-      <ImageLightbox
-        photos={(lightbox?.photos ?? []).map((p) => ({
-          url: p.image_url,
-        }))}
-        initialIndex={lightbox?.index ?? 0}
-        open={lightbox != null}
-        onClose={() => setLightbox(null)}
-      />
     </>
   );
 }
 
+// Lived sidebar row — fixed 80px tall mirror of the mobile card's
+// fixed-height contract. Thumb fills the left 56x56, the right column
+// takes the remaining width with title (clamp-1) + note (clamp-1) +
+// date stacked vertically. Wider stories live in the pin detail.
 function VisitRow({
   entry,
   onClick,
-  onOpenPhoto,
 }: {
   entry: LivedEntry;
   onClick: () => void;
-  onOpenPhoto: (photos: VisitPhoto[], index: number) => void;
 }) {
-  // Merged photos across the day, same shape the lightbox in
-  // PinDrawer's day group uses, so opening here matches there.
-  const photos = useMemo(() => {
-    const flat: { photo: VisitPhoto; visitedAt: string }[] = [];
+  const cover = useMemo(() => {
     for (const v of entry.visits) {
-      for (const p of v.visit_photos) {
-        flat.push({ photo: p, visitedAt: v.visited_at });
-      }
+      for (const p of v.visit_photos) return p.image_url;
     }
-    flat.sort((a, b) => {
-      const t = a.visitedAt.localeCompare(b.visitedAt);
-      if (t !== 0) return t;
-      return a.photo.created_at.localeCompare(b.photo.created_at);
-    });
-    return flat.map((x) => x.photo);
+    return undefined;
   }, [entry.visits]);
-  const cover = photos[0]?.image_url;
+
+  const notePreview = useMemo(() => {
+    for (const v of entry.visits) {
+      const trimmed = v.note?.trim();
+      if (trimmed) return trimmed;
+    }
+    return null;
+  }, [entry.visits]);
 
   return (
-    <li className="flex items-center gap-3 px-[14px] py-3 hover:bg-ink/5">
-      {cover ? (
-        <button
-          type="button"
-          onClick={() => onOpenPhoto(photos, 0)}
-          aria-label="View photo"
-          className="shrink-0"
-        >
-          <Thumb src={cover} alt={entry.pinTitle} />
-        </button>
-      ) : (
-        <Thumb src={undefined} alt="" />
-      )}
+    <li>
       <button
         type="button"
         onClick={onClick}
-        className="min-w-0 flex-1 text-left"
+        className="flex w-full items-center gap-3 px-[14px] text-left hover:bg-ink/5"
+        style={{ height: 80, overflow: "hidden" }}
       >
-        <div className="truncate font-display text-[16px] leading-tight text-ink">
-          {entry.pinTitle}
-        </div>
-        <div className="mt-0.5 truncate font-handwritten italic text-[13px] text-ink-soft">
-          {formatLongDate(entry.visitedAt)}
+        <Thumb src={cover} alt={entry.pinTitle} />
+        <div
+          className="flex min-w-0 flex-1 flex-col justify-center"
+          style={{ overflow: "hidden" }}
+        >
+          <div className="line-clamp-1 font-display text-[15px] leading-tight text-ink">
+            {entry.pinTitle}
+          </div>
+          {notePreview && (
+            <div className="line-clamp-1 font-handwritten italic text-[12px] text-ink-soft">
+              {notePreview}
+            </div>
+          )}
+          <div className="font-body text-[11px] text-ink-soft">
+            {formatLongDate(entry.visitedAt)}
+          </div>
         </div>
       </button>
     </li>

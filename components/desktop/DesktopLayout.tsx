@@ -17,6 +17,7 @@ interface Props {
   isAddOpen: boolean;
   pendingLatLng: LatLng | null;
   pendingPrefillTitle: string;
+  pendingPrefillPlaceId: string | null;
   recentlyAddedId: string | null;
   previewPlace: ResolvedPlace | null;
 
@@ -45,6 +46,7 @@ export default function DesktopLayout(props: Props) {
           isAddOpen={props.isAddOpen}
           pendingLatLng={props.pendingLatLng}
           pendingPrefillTitle={props.pendingPrefillTitle}
+          pendingPrefillPlaceId={props.pendingPrefillPlaceId}
           previewPlace={props.previewPlace}
           onSelectPin={props.onSelectPin}
           onCloseDetail={props.onCloseDetail}

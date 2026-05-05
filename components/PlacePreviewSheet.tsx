@@ -281,7 +281,7 @@ function DropDreamButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-function PreviewPhoto({
+export function PreviewPhoto({
   ref_,
   onClick,
 }: {
@@ -315,7 +315,7 @@ function PreviewPhoto({
   );
 }
 
-function ReviewCard({ review }: { review: PlaceReview }) {
+export function ReviewCard({ review }: { review: PlaceReview }) {
   return (
     <div
       className="rounded-lg bg-bg p-3"

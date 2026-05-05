@@ -145,6 +145,24 @@
   transform-origin: bottom center;
 }
 
+/* Link-preview skeleton — opacity pulse while OG metadata is in
+   flight. Dropped to a static 60% opacity under prefers-reduced-motion. */
+@keyframes link-skeleton-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.85; }
+}
+
+.link-skeleton {
+  animation: link-skeleton-pulse 1400ms ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .link-skeleton {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
 /* ------------------------------------------------------------------
    Paper: a single 300ms cream-white flutter when entering the theme.
    Uses ::after on body so it doesn't disturb the rest of the layout.

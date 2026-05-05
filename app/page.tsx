@@ -1,12 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { MapPin } from "lucide-react";
 import Map, { type LatLng, type MapHandle } from "@/components/Map";
 import PinDrawer, { ordinalTimeLabel } from "@/components/PinDrawer";
-import ImageLightbox from "@/components/ImageLightbox";
-import { VisitNotes, type VisitNoteEntry } from "@/components/ui/VisitNotes";
 import { MemorySearch } from "@/components/ui/MemorySearch";
-import type { VisitPhoto } from "@/hooks/usePinVisits";
 import { useLivedEntries, type LivedEntry } from "@/hooks/useLivedEntries";
 import { useProfiles, type Profile } from "@/hooks/useProfiles";
 import AddPinDrawer from "@/components/AddPinDrawer";
@@ -36,6 +34,9 @@ export default function Home() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [previewPlace, setPreviewPlace] = useState<ResolvedPlace | null>(null);
   const [pendingPrefillTitle, setPendingPrefillTitle] = useState<string>("");
+  const [pendingPrefillPlaceId, setPendingPrefillPlaceId] = useState<
+    string | null
+  >(null);
   const [searchFocused, setSearchFocused] = useState(false);
 
   const mapHandle = useRef<MapHandle>(null);
@@ -60,6 +61,7 @@ export default function Home() {
     setActiveTab("map");
     setPendingLatLng(null);
     setPendingPrefillTitle("");
+    setPendingPrefillPlaceId(null);
   }
 
   function handlePlacePick(place: ResolvedPlace) {
@@ -91,9 +93,11 @@ export default function Home() {
     if (!previewPlace) return;
     const latlng = { lat: previewPlace.lat, lng: previewPlace.lng };
     const title = previewPlace.name;
+    const placeId = previewPlace.placeId;
     setPreviewPlace(null);
     setPendingLatLng(latlng);
     setPendingPrefillTitle(title);
+    setPendingPrefillPlaceId(placeId);
     setActiveTab("add");
   }
 
@@ -167,6 +171,7 @@ export default function Home() {
     setActiveTab("map");
     setPendingLatLng(null);
     setPendingPrefillTitle("");
+    setPendingPrefillPlaceId(null);
     setSettingsOpen(false);
     setSelectedPinId(pinId);
   }
@@ -179,6 +184,7 @@ export default function Home() {
     setActiveTab("map");
     setPendingLatLng(null);
     setPendingPrefillTitle("");
+    setPendingPrefillPlaceId(null);
     setSettingsOpen(true);
   }
 
@@ -213,6 +219,7 @@ export default function Home() {
         isAddOpen={isAddOpen}
         pendingLatLng={pendingLatLng}
         pendingPrefillTitle={pendingPrefillTitle}
+        pendingPrefillPlaceId={pendingPrefillPlaceId}
         recentlyAddedId={recentlyAddedId}
         previewPlace={previewPlace}
         onMarkerClick={handleMarkerClick}
@@ -232,6 +239,7 @@ export default function Home() {
           setActiveTab("map");
           setPendingLatLng(null);
           setPendingPrefillTitle("");
+          setPendingPrefillPlaceId(null);
         }}
         onSubmittedAdd={handleSubmitted}
         onOpenExistingFromAdd={handleOpenExistingFromAdd}
@@ -291,10 +299,12 @@ export default function Home() {
         open={isAddOpen}
         pendingLatLng={pendingLatLng}
         prefillTitle={pendingPrefillTitle || undefined}
+        prefillPlaceId={pendingPrefillPlaceId}
         onClose={() => {
           setActiveTab("map");
           setPendingLatLng(null);
           setPendingPrefillTitle("");
+          setPendingPrefillPlaceId(null);
         }}
         onSubmitted={handleSubmitted}
         onOpenExistingPin={handleOpenExistingFromAdd}
@@ -331,14 +341,6 @@ function MemoriesPanel({
   const { data: profiles } = useProfiles();
   const [query, setQuery] = useState("");
 
-  // Lightbox photos are merged across the entry's visits in
-  // chronological order — same as the day-group strip in PinDrawer,
-  // so opening a card's photo navigates the entire day's roll.
-  const [lightbox, setLightbox] = useState<{
-    photos: VisitPhoto[];
-    index: number;
-  } | null>(null);
-
   const profilesByUser = useMemo(() => {
     const m: Record<string, Profile> = {};
     (profiles ?? []).forEach((p) => {
@@ -354,7 +356,10 @@ function MemoriesPanel({
   }, [query, entries]);
 
   return (
-    <div className="absolute inset-x-0 bottom-0 top-0 z-30 overflow-y-auto bg-bg pb-28 pt-[max(env(safe-area-inset-top),1.5rem)]">
+    <div
+      className="absolute inset-x-0 bottom-0 top-0 z-30 overflow-y-auto bg-bg pb-28 pt-[max(env(safe-area-inset-top),1.5rem)]"
+      style={{ overscrollBehavior: "contain", touchAction: "pan-y" }}
+    >
       <div className="mx-auto max-w-3xl px-4">
         <h2 className="font-display italic text-[22px] font-medium text-ink">
           Lived
@@ -381,23 +386,11 @@ function MemoriesPanel({
                 entry={entry}
                 profilesByUser={profilesByUser}
                 onClick={() => onSelect(entry.pinId)}
-                onOpenPhoto={(photos, index) =>
-                  setLightbox({ photos, index })
-                }
               />
             ))}
           </div>
         )}
       </div>
-
-      <ImageLightbox
-        photos={(lightbox?.photos ?? []).map((p) => ({
-          url: p.image_url,
-        }))}
-        initialIndex={lightbox?.index ?? 0}
-        open={lightbox != null}
-        onClose={() => setLightbox(null)}
-      />
     </div>
   );
 }
@@ -415,62 +408,70 @@ function NoMatchEmptyState({ query }: { query: string }) {
   );
 }
 
+// VisitCard — fixed-dimension preview tile for the Lived grid.
+// Every card is exactly 280px tall with a 140px photo strip on top
+// and 140px clipped content beneath. Long titles, long notes, and
+// extra-author labels all truncate here so the grid never grows
+// uneven rows. Tap the card to read the full memory in PinDrawer.
+const CARD_HEIGHT = 280;
+const PHOTO_HEIGHT = 140;
+
 function VisitCard({
   entry,
   profilesByUser,
   onClick,
-  onOpenPhoto,
 }: {
   entry: LivedEntry;
   profilesByUser: Record<string, Profile>;
   onClick: () => void;
-  onOpenPhoto: (photos: VisitPhoto[], index: number) => void;
 }) {
-  // Merge photos across all visits in the day, ordered by parent
-  // visited_at then photo created_at — same flatten as the day-group
-  // strip in PinDrawer, so the lightbox shows the same set.
-  const photos = useMemo(() => {
-    const flat: { photo: VisitPhoto; visitedAt: string }[] = [];
+  const cover = useMemo(() => {
     for (const v of entry.visits) {
-      for (const p of v.visit_photos) {
-        flat.push({ photo: p, visitedAt: v.visited_at });
-      }
+      for (const p of v.visit_photos) return p.image_url;
     }
-    flat.sort((a, b) => {
-      const t = a.visitedAt.localeCompare(b.visitedAt);
-      if (t !== 0) return t;
-      return a.photo.created_at.localeCompare(b.photo.created_at);
-    });
-    return flat.map((x) => x.photo);
+    return undefined;
   }, [entry.visits]);
-  const cover = photos[0]?.image_url;
 
-  // Notes for the day, attributed. VisitNotes hides labels when only
-  // one author wrote, matches the in-drawer treatment.
-  const noteEntries = useMemo<VisitNoteEntry[]>(() => {
-    return entry.visits
-      .filter((v) => v.note?.trim())
-      .map((v) => ({
-        id: v.id,
-        note: v.note!.trim(),
-        authorName: v.created_by
-          ? profilesByUser[v.created_by]?.display_name ?? "Someone"
-          : "Someone",
-        visitedAt: v.visited_at,
-      }));
+  // First non-empty note in the day — single visit days hand back
+  // their only note, multi-visit days surface the earliest one. The
+  // card is a preview, not the full record, so showing one is fine.
+  const notePreview = useMemo(() => {
+    for (const v of entry.visits) {
+      const trimmed = v.note?.trim();
+      if (trimmed) return trimmed;
+    }
+    return null;
+  }, [entry.visits]);
+
+  // Author label only when 2+ distinct people contributed visits to
+  // this day — keeps single-author cards uncluttered while still
+  // attributing collaborative days.
+  const authorLabel = useMemo(() => {
+    const distinctAuthors = new Set<string>();
+    for (const v of entry.visits) {
+      if (v.created_by) distinctAuthors.add(v.created_by);
+    }
+    if (distinctAuthors.size < 2) return null;
+    const firstAuthorId = entry.visits.find((v) => v.created_by)?.created_by;
+    if (!firstAuthorId) return null;
+    return profilesByUser[firstAuthorId]?.display_name ?? null;
   }, [entry.visits, profilesByUser]);
 
   return (
-    <div
-      className="flex flex-col overflow-hidden rounded-xl bg-surface"
-      style={{ border: "1px solid var(--border)" }}
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex flex-col rounded-xl bg-surface text-left"
+      style={{
+        height: CARD_HEIGHT,
+        overflow: "hidden",
+        border: "1px solid var(--border)",
+      }}
     >
       {cover ? (
-        <button
-          type="button"
-          onClick={() => onOpenPhoto(photos, 0)}
-          aria-label="View photo"
-          className="aspect-square w-full bg-surface"
+        <div
+          className="w-full shrink-0 bg-surface"
+          style={{ height: PHOTO_HEIGHT }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -478,34 +479,69 @@ function VisitCard({
             alt={entry.pinTitle}
             className="h-full w-full object-cover"
           />
-        </button>
+        </div>
       ) : (
-        <div className="flex aspect-square w-full items-center justify-center bg-surface font-display italic text-sm text-ink-soft">
-          no photo
+        <div
+          className="flex w-full shrink-0 items-center justify-center bg-surface"
+          style={{ height: PHOTO_HEIGHT }}
+        >
+          <MapPin
+            size={28}
+            aria-hidden
+            style={{ color: "var(--ink-soft)", opacity: 0.5 }}
+          />
         </div>
       )}
-      <button
-        type="button"
-        onClick={onClick}
-        className="flex w-full flex-col text-left"
+      <div
+        className="flex w-full flex-col"
+        style={{
+          height: CARD_HEIGHT - PHOTO_HEIGHT,
+          padding: "10px 12px",
+          overflow: "hidden",
+        }}
       >
-        <div className="flex flex-col gap-1 p-3">
-          <div className="text-[10px] uppercase tracking-wider text-accent">
-            {ordinalTimeLabel(entry.ordinal)}
-          </div>
-          <div className="line-clamp-1 font-display italic text-[16px] leading-tight text-ink">
-            {entry.pinTitle}
-          </div>
-          {noteEntries.length > 0 && (
-            <div className="max-h-[3.4rem] overflow-hidden">
-              <VisitNotes notes={noteEntries} />
-            </div>
-          )}
-          <div className="mt-1 text-[11px] text-ink-soft">
-            {formatLongDate(entry.visitedAt)}
-          </div>
+        <div className="font-body text-[10px] uppercase tracking-wider text-ink-soft">
+          {ordinalTimeLabel(entry.ordinal)}
         </div>
-      </button>
-    </div>
+        <div
+          className="line-clamp-1 font-display italic leading-tight text-ink"
+          style={{ fontSize: 15, marginTop: 2 }}
+        >
+          {entry.pinTitle}
+        </div>
+        {authorLabel && (
+          <div
+            className="font-body text-[10px] uppercase tracking-wider text-ink-soft"
+            style={{ marginTop: 2 }}
+          >
+            {authorLabel}
+          </div>
+        )}
+        {notePreview && (
+          <p
+            className="font-handwritten italic text-[13px] leading-snug text-ink"
+            style={{
+              marginTop: 4,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+              WebkitMaskImage:
+                "linear-gradient(to bottom, black 60%, transparent 100%)",
+              maskImage:
+                "linear-gradient(to bottom, black 60%, transparent 100%)",
+            }}
+          >
+            {notePreview}
+          </p>
+        )}
+        <div
+          className="font-body text-[11px] text-ink-soft"
+          style={{ marginTop: "auto" }}
+        >
+          {formatLongDate(entry.visitedAt)}
+        </div>
+      </div>
+    </button>
   );
 }

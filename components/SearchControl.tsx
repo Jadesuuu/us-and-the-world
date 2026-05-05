@@ -9,6 +9,7 @@ import {
 } from "react";
 import { Search, X, Loader2 } from "lucide-react";
 import { loadPlaces } from "@/lib/google-maps-loader";
+import { extractPlacePhoto } from "@/lib/google-place-details";
 import { useOnClickOutside } from "@/lib/use-on-click-outside";
 
 export interface PlaceReview {
@@ -26,6 +27,10 @@ export interface PlacePhoto {
 }
 
 export interface ResolvedPlace {
+  // Google's place id. Persisted on the pin so the pre-lived drawer can
+  // re-fetch photos/reviews even days after the user dismissed the
+  // preview sheet without dropping a dream.
+  placeId: string;
   name: string;
   address: string;
   lat: number;
@@ -145,35 +150,6 @@ export default function SearchControl({
     };
   }, [query]);
 
-  function extractPlacePhoto(
-    photo: google.maps.places.Photo,
-  ): PlacePhoto | null {
-    let ref: string | null = null;
-    const directName = (photo as unknown as { name?: string }).name;
-    if (typeof directName === "string" && directName.length > 0) {
-      ref = directName.startsWith("places/") ? directName : null;
-    } else {
-      try {
-        const uri = photo.getURI({ maxWidth: 400 });
-        const m = uri.match(/places\/[A-Za-z0-9_-]+\/photos\/[A-Za-z0-9_-]+/);
-        ref = m?.[0] ?? null;
-      } catch {
-        ref = null;
-      }
-    }
-    if (!ref) return null;
-
-    // Google's PhotoAuthorAttribution shape; first author wins.
-    const attributions = (photo as unknown as {
-      authorAttributions?: { displayName?: string }[];
-    }).authorAttributions;
-    const attribution = attributions?.find(
-      (a) => typeof a.displayName === "string" && a.displayName.length > 0,
-    )?.displayName;
-
-    return { ref, attribution };
-  }
-
   async function handleSelect(suggestion: Suggestion) {
     const lib = placesLibRef.current;
     if (!lib) return;
@@ -214,6 +190,7 @@ export default function SearchControl({
         }));
 
       onPick({
+        placeId: suggestion.placeId,
         name: place.displayName ?? suggestion.mainText,
         address: place.formattedAddress ?? suggestion.secondaryText,
         lat,
