@@ -20,12 +20,17 @@ import { VisitNotes, type VisitNoteEntry } from "./ui/VisitNotes";
 import { PreviewPhoto, ReviewCard } from "./PlacePreviewSheet";
 import { fetchGooglePlaceDetails } from "@/lib/google-place-details";
 import { IS_DEMO } from "@/lib/demo";
-import DemoPlaceBlock from "./DemoPlaceBlock";
+import dynamic from "next/dynamic";
 import {
   useScrollShadows,
   SCROLL_SHADOW_TOP,
   SCROLL_SHADOW_BOTTOM,
 } from "@/lib/use-scroll-shadows";
+
+// Loaded on demand so the demo snapshot never ships in production bundles.
+const DemoPlaceBlock = dynamic(() => import("./DemoPlaceBlock"), {
+  ssr: false,
+});
 
 interface Props {
   pin: Pin | null;

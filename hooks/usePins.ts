@@ -3,7 +3,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { IS_DEMO } from "@/lib/demo";
-import { DEMO_PINS } from "@/lib/demo-data";
 
 type RawPin = {
   id: string;
@@ -48,7 +47,9 @@ export function usePins() {
   return useQuery<Pin[]>({
     queryKey: ["pins"],
     queryFn: async () => {
-      if (IS_DEMO) return DEMO_PINS;
+      // Dynamic import keeps the snapshot out of the production bundle:
+      // IS_DEMO folds to false at build time and this branch is dropped.
+      if (IS_DEMO) return (await import("@/lib/demo-data")).DEMO_PINS;
       const supabase = createClient();
       // The view returns every column from `pins` plus visit_day_count.
       // RLS on the underlying tables still applies because the view is

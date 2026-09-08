@@ -9,8 +9,12 @@ import { DEMO_BACK_URL, IS_DEMO } from "@/lib/demo";
 // mode). Tapping it expands a card that spells out which features are
 // switched off. Renders nothing outside demo builds.
 export default function DemoBanner() {
-  const [open, setOpen] = useState(false);
   if (!IS_DEMO) return null;
+  return <DemoBannerInner />;
+}
+
+function DemoBannerInner() {
+  const [open, setOpen] = useState(false);
 
   return (
     <>

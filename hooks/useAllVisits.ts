@@ -3,7 +3,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { IS_DEMO } from "@/lib/demo";
-import { DEMO_VISITS } from "@/lib/demo-data";
 import type { Visit } from "./usePinVisits";
 
 export type VisitWithPin = Visit & {
@@ -14,7 +13,7 @@ export function useAllVisits() {
   return useQuery<VisitWithPin[]>({
     queryKey: ["visits", "all"],
     queryFn: async () => {
-      if (IS_DEMO) return DEMO_VISITS;
+      if (IS_DEMO) return (await import("@/lib/demo-data")).DEMO_VISITS;
       const supabase = createClient();
       const { data, error } = await supabase
         .from("visits")

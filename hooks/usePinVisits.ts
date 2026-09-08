@@ -3,7 +3,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { IS_DEMO } from "@/lib/demo";
-import { DEMO_VISITS } from "@/lib/demo-data";
 
 export type VisitPhoto = {
   id: string;
@@ -33,7 +32,10 @@ export function usePinVisits(pinId: string | null) {
     enabled: pinId != null,
     queryFn: async () => {
       if (!pinId) return [];
-      if (IS_DEMO) return DEMO_VISITS.filter((v) => v.pin_id === pinId);
+      if (IS_DEMO) {
+        const { DEMO_VISITS } = await import("@/lib/demo-data");
+        return DEMO_VISITS.filter((v) => v.pin_id === pinId);
+      }
       const supabase = createClient();
       const { data, error } = await supabase
         .from("visits")
