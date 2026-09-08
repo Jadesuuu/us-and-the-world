@@ -7,6 +7,7 @@ import GalaxyBackdrop from "@/components/GalaxyBackdrop";
 import PaperTexture from "@/components/PaperTexture";
 import AtmosphericLayer from "@/components/AtmosphericLayer";
 import DemoBanner from "@/components/DemoBanner";
+import { IS_DEMO } from "@/lib/demo";
 import { Toaster } from "sonner";
 
 const fraunces = Fraunces({
@@ -43,14 +44,18 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#f7f1e8",
+  // Browser chrome tint matches the first-paint theme: Galaxy in the demo.
+  themeColor: IS_DEMO ? "#050b1f" : "#f7f1e8",
   viewportFit: "cover",
   width: "device-width",
   initialScale: 1,
 };
 
+// Keep in sync with DEFAULT_THEME in components/ThemeProvider.tsx.
+const defaultTheme = IS_DEMO ? "galaxy" : "auto";
+
 const fouc = `try {
-  var t = localStorage.getItem('jf-theme') || 'auto';
+  var t = localStorage.getItem('jf-theme') || '${defaultTheme}';
   if (t === 'auto') {
     t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'night' : 'dream';
   }

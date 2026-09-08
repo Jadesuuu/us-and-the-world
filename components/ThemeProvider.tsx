@@ -14,6 +14,12 @@ import {
   type ThemeId,
   type ThemePreference,
 } from "@/lib/themes";
+import { IS_DEMO } from "@/lib/demo";
+
+// First-visit preference. The demo opens in Galaxy because that's the
+// showpiece; the real app follows the system. Must match the inline FOUC
+// script in app/layout.tsx.
+export const DEFAULT_THEME: ThemePreference = IS_DEMO ? "galaxy" : "auto";
 
 interface ThemeContextValue {
   theme: ThemePreference;
@@ -34,7 +40,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // SSR-safe initial state. The inline FOUC script in <head> has already
   // applied data-theme to <html>, so we don't render a flash. We just need
   // to mirror the same source-of-truth into React state on mount.
-  const [theme, setThemeState] = useState<ThemePreference>("auto");
+  const [theme, setThemeState] = useState<ThemePreference>(DEFAULT_THEME);
   const [systemDark, setSystemDark] = useState(false);
 
   useEffect(() => {
