@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import SearchControl, { type ResolvedPlace } from "@/components/SearchControl";
 import { SettingsContent } from "@/components/SettingsDrawer";
 import Popover from "./Popover";
+import { IS_DEMO } from "@/lib/demo";
 
 interface Props {
   onPlacePick: (place: ResolvedPlace) => void;
@@ -23,10 +24,12 @@ export default function DesktopHeader({ onPlacePick }: Props) {
       </h1>
 
       <div className="flex flex-1 justify-center">
-        <SearchControl
-          variant="inline"
-          onPick={onPlacePick}
-        />
+        {!IS_DEMO && (
+          <SearchControl
+            variant="inline"
+            onPick={onPlacePick}
+          />
+        )}
       </div>
 
       <button

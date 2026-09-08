@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useMemo } from "react";
+import { IS_DEMO } from "@/lib/demo";
 
 export interface VisitNoteEntry {
   // Optional stable identifier for React keys; falls back to index.
@@ -22,6 +23,8 @@ interface Props {
 // Single note → no attribution label (one voice doesn't need a name).
 // Two or more → each note gets a small uppercase author label and is
 // separated from the next by a thin centered divider.
+// Demo builds always label: a stranger browsing the snapshot has no way
+// to know which of the two people is speaking.
 export function VisitNotes({ notes }: Props) {
   const sorted = useMemo(
     () => [...notes].sort((a, b) => a.visitedAt.localeCompare(b.visitedAt)),
@@ -29,7 +32,7 @@ export function VisitNotes({ notes }: Props) {
   );
 
   if (sorted.length === 0) return null;
-  const showAttribution = sorted.length > 1;
+  const showAttribution = sorted.length > 1 || IS_DEMO;
 
   return (
     <div className="flex flex-col gap-3">

@@ -7,6 +7,7 @@ import { AddPinForm } from "@/components/AddPinDrawer";
 import { PreviewBody } from "@/components/PlacePreviewSheet";
 import { MemorySearch } from "@/components/ui/MemorySearch";
 import { usePins, type Pin } from "@/hooks/usePins";
+import { useProfiles } from "@/hooks/useProfiles";
 import {
   useLivedEntries,
   type LivedEntry,
@@ -14,6 +15,7 @@ import {
 import { formatLongDate } from "@/lib/format";
 import type { ResolvedPlace } from "@/components/SearchControl";
 import type { LatLng } from "@/components/Map";
+import { IS_DEMO } from "@/lib/demo";
 import {
   useScrollShadows,
   SCROLL_SHADOW_TOP,
@@ -167,22 +169,24 @@ function ListMode({
         <div ref={bottomSentinelRef} style={{ height: 1 }} />
       </div>
 
-      <div
-        className="shrink-0 bg-surface p-4"
-        style={{
-          borderTop: "0.5px solid var(--border)",
-          boxShadow: bottomShadow ? SCROLL_SHADOW_BOTTOM : "none",
-          transition: "box-shadow 200ms ease-out",
-        }}
-      >
-        <button
-          type="button"
-          onClick={onOpenAdd}
-          className="h-12 w-full rounded-lg bg-accent font-display italic text-[18px] text-bg"
+      {!IS_DEMO && (
+        <div
+          className="shrink-0 bg-surface p-4"
+          style={{
+            borderTop: "0.5px solid var(--border)",
+            boxShadow: bottomShadow ? SCROLL_SHADOW_BOTTOM : "none",
+            transition: "box-shadow 200ms ease-out",
+          }}
         >
-          Drop a dream
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={onOpenAdd}
+            className="h-12 w-full rounded-lg bg-accent font-display italic text-[18px] text-bg"
+          >
+            Drop a dream
+          </button>
+        </div>
+      )}
     </>
   );
 }
@@ -450,6 +454,16 @@ function VisitRow({
     return null;
   }, [entry.visits]);
 
+  // Demo builds prefix the date with whoever logged the (first) visit so
+  // the two voices stay distinguishable in the list.
+  const { data: profiles } = useProfiles();
+  const author = useMemo(() => {
+    if (!IS_DEMO) return null;
+    const id = entry.visits.find((v) => v.created_by)?.created_by;
+    if (!id) return null;
+    return profiles?.find((p) => p.user_id === id)?.display_name ?? null;
+  }, [entry.visits, profiles]);
+
   return (
     <li>
       <button
@@ -472,6 +486,7 @@ function VisitRow({
             </div>
           )}
           <div className="font-body text-[11px] text-ink-soft">
+            {author ? `${author} · ` : ""}
             {formatLongDate(entry.visitedAt)}
           </div>
         </div>

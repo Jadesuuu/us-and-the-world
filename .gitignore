@@ -45,3 +45,6 @@ skills-lock.json
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# demo snapshot source (raw personal export, never committed)
+scripts/demo-source/*.json
