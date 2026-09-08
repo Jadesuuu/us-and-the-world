@@ -6,7 +6,7 @@ import type { VisitWithPin } from "@/hooks/useAllVisits";
 import type { Profile } from "@/hooks/useProfiles";
 import type { LightboxPhoto } from "@/components/ImageLightbox";
 
-export const DEMO_GENERATED_AT = "2026-09-08T16:31:58.683Z";
+export const DEMO_GENERATED_AT = "2026-09-08T17:03:30.849Z";
 export const DEMO_PINS: Pin[] = [
   {
     "id": "demo-pin-sydney",
@@ -1298,256 +1298,310 @@ export const DEMO_PLACE_PHOTOS: Record<string, LightboxPhoto[]> = {
   "f46b2231-5772-459e-b270-921271edfcc1": [
     {
       "url": "/demo/places/f46b2231-5772-459e-b270-921271edfcc1-0.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/f46b2231-5772-459e-b270-921271edfcc1-0.jpg",
       "attribution": "Judgefloro · CC0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/f46b2231-5772-459e-b270-921271edfcc1-1.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/f46b2231-5772-459e-b270-921271edfcc1-1.jpg",
       "attribution": "Judgefloro · CC0 · Wikimedia Commons"
     }
   ],
   "ef5178ba-f542-4ab0-805e-c8690d19e59b": [
     {
       "url": "/demo/places/ef5178ba-f542-4ab0-805e-c8690d19e59b-0.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/ef5178ba-f542-4ab0-805e-c8690d19e59b-0.jpg",
       "attribution": "AveMariyuh · CC BY-SA 4.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/ef5178ba-f542-4ab0-805e-c8690d19e59b-1.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/ef5178ba-f542-4ab0-805e-c8690d19e59b-1.jpg",
       "attribution": "Patrickroque01 · CC BY-SA 4.0 · Wikimedia Commons"
     }
   ],
   "c714e19c-8f57-48c1-8c94-0e02b6fd99fe": [
     {
       "url": "/demo/places/c714e19c-8f57-48c1-8c94-0e02b6fd99fe-0.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/c714e19c-8f57-48c1-8c94-0e02b6fd99fe-0.jpg",
       "attribution": "Emman Asuncion Foronda · CC BY-SA 4.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/c714e19c-8f57-48c1-8c94-0e02b6fd99fe-1.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/c714e19c-8f57-48c1-8c94-0e02b6fd99fe-1.jpg",
       "attribution": "Psalm91st · CC BY-SA 4.0 · Wikimedia Commons"
     }
   ],
   "69db5f5d-7672-400e-bbf2-2271ad63456b": [
     {
       "url": "/demo/places/69db5f5d-7672-400e-bbf2-2271ad63456b-0.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/69db5f5d-7672-400e-bbf2-2271ad63456b-0.jpg",
       "attribution": "andre oortgijs · CC BY-SA 3.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/69db5f5d-7672-400e-bbf2-2271ad63456b-1.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/69db5f5d-7672-400e-bbf2-2271ad63456b-1.jpg",
       "attribution": "Heinrich Balbuena · CC BY 3.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/69db5f5d-7672-400e-bbf2-2271ad63456b-2.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/69db5f5d-7672-400e-bbf2-2271ad63456b-2.jpg",
       "attribution": "Diego Delso · CC BY-SA 4.0 · Wikimedia Commons"
     }
   ],
   "b4643716-521f-4562-9a2a-f8a62c54254f": [
     {
       "url": "/demo/places/b4643716-521f-4562-9a2a-f8a62c54254f-0.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/b4643716-521f-4562-9a2a-f8a62c54254f-0.jpg",
       "attribution": "Vyacheslav Argenberg · CC BY 4.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/b4643716-521f-4562-9a2a-f8a62c54254f-1.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/b4643716-521f-4562-9a2a-f8a62c54254f-1.jpg",
       "attribution": "Patrick Roque · CC BY-SA 3.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/b4643716-521f-4562-9a2a-f8a62c54254f-2.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/b4643716-521f-4562-9a2a-f8a62c54254f-2.jpg",
       "attribution": "Vyacheslav Argenberg · CC BY 4.0 · Wikimedia Commons"
     }
   ],
   "4255b7aa-f0f7-4d48-9d13-103b64942779": [
     {
       "url": "/demo/places/4255b7aa-f0f7-4d48-9d13-103b64942779-0.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/4255b7aa-f0f7-4d48-9d13-103b64942779-0.jpg",
       "attribution": "afterdog · CC0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/4255b7aa-f0f7-4d48-9d13-103b64942779-1.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/4255b7aa-f0f7-4d48-9d13-103b64942779-1.jpg",
       "attribution": "Mshuang2 · CC0 · Wikimedia Commons"
     }
   ],
   "7a8ac032-8548-45ad-8f02-88f8eb58ec90": [
     {
       "url": "/demo/places/7a8ac032-8548-45ad-8f02-88f8eb58ec90-0.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/7a8ac032-8548-45ad-8f02-88f8eb58ec90-0.jpg",
       "attribution": "Zhou Guanhuai · CC BY-SA 4.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/7a8ac032-8548-45ad-8f02-88f8eb58ec90-1.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/7a8ac032-8548-45ad-8f02-88f8eb58ec90-1.jpg",
       "attribution": "Fumikas Sagisavas · CC0 · Wikimedia Commons"
     }
   ],
   "demo-pin-inari": [
     {
       "url": "/demo/places/demo-pin-inari-0.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-inari-0.jpg",
       "attribution": "Basile Morin · CC BY-SA 4.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-inari-1.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-inari-1.jpg",
       "attribution": "Marco Almbauer · CC BY-SA 4.0 · Wikimedia Commons"
     }
   ],
   "demo-pin-tegallalang": [
     {
       "url": "/demo/places/demo-pin-tegallalang-0.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-tegallalang-0.jpg",
       "attribution": "Philip Nalangan · CC BY 4.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-tegallalang-1.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-tegallalang-1.jpg",
       "attribution": "Vyacheslav Argenberg · CC BY 4.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-tegallalang-2.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-tegallalang-2.jpg",
       "attribution": "Christophe95 · CC BY-SA 4.0 · Wikimedia Commons"
     }
   ],
   "demo-pin-oia": [
     {
       "url": "/demo/places/demo-pin-oia-0.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-oia-0.jpg",
       "attribution": "karol m · CC BY 2.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-oia-1.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-oia-1.jpg",
       "attribution": "User:Anna.Tsolidou · CC BY-SA 4.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-oia-2.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-oia-2.jpg",
       "attribution": "Sidvics · CC BY-SA 4.0 · Wikimedia Commons"
     }
   ],
   "demo-pin-alfama": [
     {
       "url": "/demo/places/demo-pin-alfama-0.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-alfama-0.jpg",
       "attribution": "Romazur · CC BY-SA 3.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-alfama-1.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-alfama-1.jpg",
       "attribution": "Sonse · CC BY 2.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-alfama-2.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-alfama-2.jpg",
       "attribution": "TeWeBs · CC BY-SA 4.0 · Wikimedia Commons"
     }
   ],
   "demo-pin-montmartre": [
     {
       "url": "/demo/places/demo-pin-montmartre-0.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-montmartre-0.jpg",
       "attribution": "Giò Terra (Terragio67) · CC BY-SA 4.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-montmartre-1.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-montmartre-1.jpg",
       "attribution": "Dietmar Rabich · CC BY-SA 4.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-montmartre-2.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-montmartre-2.jpg",
       "attribution": "Joe deSousa · CC0 · Wikimedia Commons"
     }
   ],
   "demo-pin-iceland": [
     {
       "url": "/demo/places/demo-pin-iceland-0.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-iceland-0.jpg",
       "attribution": "Jakub Hałun · CC BY 4.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-iceland-1.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-iceland-1.jpg",
       "attribution": "Anjali Kiggal · CC BY-SA 4.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-iceland-2.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-iceland-2.jpg",
       "attribution": "Anjali Kiggal · CC BY-SA 4.0 · Wikimedia Commons"
     }
   ],
   "demo-pin-moraine": [
     {
       "url": "/demo/places/demo-pin-moraine-0.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-moraine-0.jpg",
       "attribution": "David Zhang · CC BY-SA 2.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-moraine-1.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-moraine-1.jpg",
       "attribution": "Tobias Alt, Tobi 87 · CC BY-SA 4.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-moraine-2.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-moraine-2.jpg",
       "attribution": "Chensiyuan · CC BY-SA 4.0 · Wikimedia Commons"
     }
   ],
   "demo-pin-brooklyn": [
     {
       "url": "/demo/places/demo-pin-brooklyn-0.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-brooklyn-0.jpg",
       "attribution": "Martin St-Amant (S23678) · CC BY 3.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-brooklyn-1.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-brooklyn-1.jpg",
       "attribution": "Superbass · CC BY-SA 4.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-brooklyn-2.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-brooklyn-2.jpg",
       "attribution": "Christian David · CC BY-SA 4.0 · Wikimedia Commons"
     }
   ],
   "demo-pin-machu": [
     {
       "url": "/demo/places/demo-pin-machu-0.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-machu-0.jpg",
       "attribution": "Martin St-Amant (S23678) · CC BY-SA 3.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-machu-1.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-machu-1.jpg",
       "attribution": "Diego Delso · CC BY-SA 4.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-machu-2.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-machu-2.jpg",
       "attribution": "Martin St-Amant (S23678) · CC BY-SA 3.0 · Wikimedia Commons"
     }
   ],
   "demo-pin-bokaap": [
     {
       "url": "/demo/places/demo-pin-bokaap-0.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-bokaap-0.jpg",
       "attribution": "Moheen Reeyad · CC BY-SA 4.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-bokaap-1.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-bokaap-1.jpg",
       "attribution": "Dietmar Rabich · CC BY-SA 4.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-bokaap-2.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-bokaap-2.jpg",
       "attribution": "Dietmar Rabich · CC BY-SA 4.0 · Wikimedia Commons"
     }
   ],
   "demo-pin-galata": [
     {
       "url": "/demo/places/demo-pin-galata-0.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-galata-0.jpg",
       "attribution": "Alexxx1979 · CC BY-SA 4.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-galata-1.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-galata-1.jpg",
       "attribution": "Nevit Dilmen (talk) · CC BY-SA 3.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-galata-2.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-galata-2.jpg",
       "attribution": "Alexxx1979 · CC BY-SA 3.0 · Wikimedia Commons"
     }
   ],
   "demo-pin-jemaa": [
     {
       "url": "/demo/places/demo-pin-jemaa-0.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-jemaa-0.jpg",
       "attribution": "procsilas · CC BY 2.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-jemaa-1.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-jemaa-1.jpg",
       "attribution": "Jakub Hałun · CC BY 4.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-jemaa-2.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-jemaa-2.jpg",
       "attribution": "Alexey Komarov · CC BY 3.0 · Wikimedia Commons"
     }
   ],
   "demo-pin-sydney": [
     {
       "url": "/demo/places/demo-pin-sydney-0.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-sydney-0.jpg",
       "attribution": "Benh LIEU SONG (Flickr) · CC BY-SA 4.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-sydney-1.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-sydney-1.jpg",
       "attribution": "BenAveling · CC BY-SA 3.0 · Wikimedia Commons"
     },
     {
       "url": "/demo/places/demo-pin-sydney-2.jpg",
+      "thumbnailUrl": "/demo/places/thumbs/demo-pin-sydney-2.jpg",
       "attribution": "Thomas Adams · CC BY-SA 4.0 · Wikimedia Commons"
     }
   ]

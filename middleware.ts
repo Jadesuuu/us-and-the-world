@@ -20,7 +20,12 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Run on all paths except Next internals and static asset extensions.
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    // Run on pages only. Skipped:
+    //   - Next internals and static asset extensions
+    //   - /api/* — every route handler calls supabase.auth.getUser()
+    //     itself, so the middleware's getUser() was a second network
+    //     round-trip per request (two per place-photo thumbnail)
+    //   - sw.js / manifest.json — public by nature, no session needed
+    "/((?!api/|_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

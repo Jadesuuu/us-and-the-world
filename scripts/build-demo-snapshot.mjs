@@ -9,7 +9,7 @@
 //
 // Usage: node scripts/build-demo-snapshot.mjs
 
-import { readFile, writeFile, mkdir, readdir, unlink } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
@@ -95,10 +95,24 @@ for (const ph of raw.visit_photos ?? []) {
 }
 
 // ---- photo download --------------------------------------------------
-await mkdir(OUT_PHOTOS, { recursive: true });
-for (const f of await readdir(OUT_PHOTOS)) {
-  await unlink(path.join(OUT_PHOTOS, f));
+// Every full-size photo also gets a 480px `thumbs/` sibling. The app's
+// thumbUrl() helper (lib/image-url.ts) points list/grid slots at these so
+// the home page doesn't download megabytes of 1400px images.
+const THUMB_WIDTH = 480;
+async function resetDir(dir) {
+  await rm(dir, { recursive: true, force: true });
+  await mkdir(path.join(dir, "thumbs"), { recursive: true });
 }
+async function writeWithThumb(dir, file, buf) {
+  await writeFile(path.join(dir, file), buf);
+  const thumb = await sharp(buf)
+    .rotate()
+    .resize({ width: THUMB_WIDTH, withoutEnlargement: true })
+    .jpeg({ quality: 72, mozjpeg: true })
+    .toBuffer();
+  await writeFile(path.join(dir, "thumbs", file), thumb);
+}
+await resetDir(OUT_PHOTOS);
 
 function webSized(url) {
   // Cloudinary accepts transformations after /image/upload/.
@@ -111,10 +125,7 @@ function webSized(url) {
   return url;
 }
 
-await mkdir(OUT_PLACES, { recursive: true });
-for (const f of await readdir(OUT_PLACES)) {
-  await unlink(path.join(OUT_PLACES, f));
-}
+await resetDir(OUT_PLACES);
 
 let bytes = 0;
 let count = 0;
@@ -146,13 +157,14 @@ async function localizeCommons(photo, id) {
     .jpeg({ quality: 76, mozjpeg: true })
     .toBuffer();
   const file = `${id}.jpg`;
-  await writeFile(path.join(OUT_PLACES, file), buf);
+  await writeWithThumb(OUT_PLACES, file, buf);
   bytes += buf.length;
   commonsCount += 1;
   credits.push({ file, title: photo.title, artist: photo.artist, license: photo.license });
   await sleep(250);
   return {
     url: `/demo/places/${file}`,
+    thumbnailUrl: `/demo/places/thumbs/${file}`,
     attribution: `${photo.artist} · ${photo.license} · Wikimedia Commons`,
   };
 }
@@ -172,7 +184,7 @@ async function localize(url, id) {
   }
   const buf = Buffer.from(await res.arrayBuffer());
   const file = `${id}.jpg`;
-  await writeFile(path.join(OUT_PHOTOS, file), buf);
+  await writeWithThumb(OUT_PHOTOS, file, buf);
   bytes += buf.length;
   count += 1;
   return `/demo/photos/${file}`;

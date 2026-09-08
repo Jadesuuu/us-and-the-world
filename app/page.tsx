@@ -23,6 +23,7 @@ import { usePins } from "@/hooks/usePins";
 import { formatLongDate } from "@/lib/format";
 import { findExistingPin } from "@/lib/geo";
 import { IS_DEMO } from "@/lib/demo";
+import { thumbUrl } from "@/lib/image-url";
 import { toast } from "sonner";
 
 export default function Home() {
@@ -443,6 +444,7 @@ function MemoriesPanel({
       <ImageLightbox
         photos={(lightbox?.photos ?? []).map((p) => ({
           url: p.image_url,
+          thumbnailUrl: thumbUrl(p.image_url, 120),
           attribution: p.attribution ?? undefined,
         }))}
         initialIndex={lightbox?.index ?? 0}
@@ -551,8 +553,10 @@ function VisitCard({
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={cover}
+            src={thumbUrl(cover, 200)}
             alt={entry.pinTitle}
+            loading="lazy"
+            decoding="async"
             className="h-full w-full object-cover"
           />
         </button>

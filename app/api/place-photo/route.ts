@@ -42,9 +42,13 @@ export async function GET(request: NextRequest) {
   }
 
   const upstream = `https://places.googleapis.com/v1/${ref}/media?maxHeightPx=${heightPx}`;
+  // Cache the upstream bytes in Next's data cache for a day. The route is
+  // auth-gated and dynamic so no CDN ever caches it; without this every
+  // open of a pre-lived pin re-fetched (and re-billed) each thumbnail.
   const res = await fetch(upstream, {
     headers: { "X-Goog-Api-Key": apiKey },
     redirect: "follow",
+    next: { revalidate: 86400 },
   });
 
   if (!res.ok) {
@@ -61,7 +65,8 @@ export async function GET(request: NextRequest) {
     status: 200,
     headers: {
       "content-type": contentType,
-      "cache-control": "public, max-age=86400, immutable",
+      // private: the response is behind the user's session cookie.
+      "cache-control": "private, max-age=86400, immutable",
     },
   });
 }

@@ -26,6 +26,9 @@ const caveat = Caveat({
   variable: "--font-caveat",
   subsets: ["latin"],
   weight: ["400"],
+  // Only used for handwritten visit notes inside drawers; fetch it when
+  // first painted rather than ahead of the map.
+  preload: false,
 });
 
 export const metadata: Metadata = {
@@ -54,6 +57,16 @@ export const viewport: Viewport = {
 // Keep in sync with DEFAULT_THEME in components/ThemeProvider.tsx.
 const defaultTheme = IS_DEMO ? "galaxy" : "auto";
 
+// Origin only (no path) for the preconnect hint. Undefined in demo builds.
+const supabaseOrigin = (() => {
+  try {
+    const u = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    return u ? new URL(u).origin : null;
+  } catch {
+    return null;
+  }
+})();
+
 const fouc = `try {
   var t = localStorage.getItem('jf-theme') || '${defaultTheme}';
   if (t === 'auto') {
@@ -75,11 +88,23 @@ export default function RootLayout({
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: fouc }} />
+        {/* The map is the first thing on screen and every style, sprite,
+            glyph and tile comes from api.mapbox.com. Opening the
+            connection during HTML parse saves a DNS+TLS round trip before
+            the first tile request. */}
+        <link rel="preconnect" href="https://api.mapbox.com" />
+        <link rel="dns-prefetch" href="https://events.mapbox.com" />
+        {!IS_DEMO && supabaseOrigin && (
+          <link rel="preconnect" href={supabaseOrigin} />
+        )}
         {/* Low-priority preload: warms the cache so switching to Galaxy
             doesn't flash a black screen before the starfield paints.
             Remove if it ever shows up as a regression on slow links. */}
         <link
-          rel="preload"
+          // Only the demo opens in Galaxy. Production defaults to Dream or
+          // Night, so a high-priority preload there just competes with the
+          // map for bandwidth; prefetch warms the cache at idle instead.
+          rel={IS_DEMO ? "preload" : "prefetch"}
           as="image"
           href="/textures/starfield.webp"
           type="image/webp"

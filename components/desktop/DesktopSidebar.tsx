@@ -16,6 +16,7 @@ import { formatLongDate } from "@/lib/format";
 import type { ResolvedPlace } from "@/components/SearchControl";
 import type { LatLng } from "@/components/Map";
 import { IS_DEMO } from "@/lib/demo";
+import { thumbUrl } from "@/lib/image-url";
 import {
   useScrollShadows,
   SCROLL_SHADOW_TOP,
@@ -504,7 +505,13 @@ function Thumb({ src, alt }: { src: string | undefined; alt: string }) {
     return (
       <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-bg">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={src} alt={alt} className="h-full w-full object-cover" />
+        <img
+          src={thumbUrl(src, 56)}
+          alt={alt}
+          loading="lazy"
+          decoding="async"
+          className="h-full w-full object-cover"
+        />
       </div>
     );
   }

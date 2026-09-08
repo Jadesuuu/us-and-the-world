@@ -108,11 +108,10 @@ export default function SearchControl({
     }
   }, []);
 
-  // Preload the Places library in the background on mount. Cheap script
-  // download, no API calls billed until the user actually queries.
-  useEffect(() => {
-    void ensurePlaces();
-  }, [ensurePlaces]);
+  // The Places library (several hundred KB of third-party script) is
+  // loaded on first focus, not on mount, so it never competes with the
+  // map's own JS and tiles during initial load. Focus-to-first-keystroke
+  // is comfortably longer than the script fetch on a warm connection.
 
   // Debounced prediction fetch — 200ms feels right for typing cadence.
   useEffect(() => {
@@ -148,7 +147,9 @@ export default function SearchControl({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query]);
+    // loadingScript: re-run once the lazily loaded library arrives so a
+    // query typed during the fetch still gets its suggestions.
+  }, [query, loadingScript]);
 
   async function handleSelect(suggestion: Suggestion) {
     const lib = placesLibRef.current;
@@ -263,7 +264,10 @@ export default function SearchControl({
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onFocus={() => setFocused(true)}
+            onFocus={() => {
+              setFocused(true);
+              void ensurePlaces();
+            }}
             placeholder="find somewhere to dream of..."
             className="placeholder-fraunces flex-1 bg-transparent text-[16px] text-ink outline-none"
             style={{ fontFamily: "var(--font-body)" }}

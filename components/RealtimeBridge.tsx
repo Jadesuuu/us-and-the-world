@@ -106,13 +106,31 @@ export function RealtimeBridge() {
       });
     }
 
+    // Coalesce invalidations. A partner logging a visit with ten photos
+    // produces eleven row events within a second or two; without this each
+    // one re-downloaded the full all-visits query (every visit, every photo
+    // row). One refetch per key per burst is enough.
+    const pendingKeys = new Set<"pins" | "visits">();
+    let flushTimer: number | null = null;
+    function invalidateSoon(key: "pins" | "visits") {
+      pendingKeys.add(key);
+      if (flushTimer != null) return;
+      flushTimer = window.setTimeout(() => {
+        flushTimer = null;
+        for (const k of pendingKeys) {
+          queryClient.invalidateQueries({ queryKey: [k] });
+        }
+        pendingKeys.clear();
+      }, 400);
+    }
+
     const channel = supabase
       .channel("app-realtime")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "pins" },
         (payload) => {
-          queryClient.invalidateQueries({ queryKey: ["pins"] });
+          invalidateSoon("pins");
           if (payload.eventType === "INSERT") {
             notifyPinInsert(payload.new as PinInsert);
           }
@@ -125,8 +143,8 @@ export function RealtimeBridge() {
           // A new/edited/deleted visit affects:
           //   - the per-pin timeline (queryKey starts with "visits")
           //   - the pin's derived has_visits flag (queryKey ["pins"])
-          queryClient.invalidateQueries({ queryKey: ["visits"] });
-          queryClient.invalidateQueries({ queryKey: ["pins"] });
+          invalidateSoon("visits");
+          invalidateSoon("pins");
           if (payload.eventType === "INSERT") {
             notifyVisitInsert(payload.new as VisitInsert);
           }
@@ -136,13 +154,14 @@ export function RealtimeBridge() {
         "postgres_changes",
         { event: "*", schema: "public", table: "visit_photos" },
         () => {
-          queryClient.invalidateQueries({ queryKey: ["visits"] });
+          invalidateSoon("visits");
         },
       )
       .subscribe();
 
     return () => {
       window.clearTimeout(armTimer);
+      if (flushTimer != null) window.clearTimeout(flushTimer);
       supabase.removeChannel(channel);
     };
   }, [queryClient]);

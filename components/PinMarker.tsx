@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 interface PinMarkerProps {
@@ -21,7 +22,7 @@ export function rotationFromId(id: string): number {
 
 const SPRING = { type: "spring" as const, stiffness: 500, damping: 30 };
 
-export default function PinMarker({
+function PinMarker({
   fill,
   rotation = 0,
   animate = false,
@@ -130,3 +131,8 @@ export default function PinMarker({
     </div>
   );
 }
+
+// All props are primitives, so a shallow compare skips re-rendering every
+// marker (and its two AnimatePresence trees) whenever unrelated page
+// state changes: drawer open, search focus, pending pin, and so on.
+export default memo(PinMarker);

@@ -6,6 +6,7 @@ import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
 import useEmblaCarousel from "embla-carousel-react";
 import { useIsDesktop } from "@/lib/use-is-desktop";
+import { optimizedUrl } from "@/lib/image-url";
 
 // Source-agnostic photo shape so the lightbox can host visit photos
 // (Cloudinary), Google Places previews, or anything else without
@@ -36,21 +37,9 @@ function reducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
-// Cloudinary delivery URLs accept transformations after `/image/upload/`.
-// Inserting `f_auto,q_auto` lets Cloudinary pick the best format and
-// quality for the user's device. Non-Cloudinary URLs pass through.
-function optimizeUrl(url: string): string {
-  if (
-    !url.includes("res.cloudinary.com") ||
-    !url.includes("/image/upload/")
-  ) {
-    return url;
-  }
-  if (/\/image\/upload\/[a-z]_[a-z]/.test(url)) {
-    return url;
-  }
-  return url.replace("/image/upload/", "/image/upload/f_auto,q_auto/");
-}
+// Cloudinary delivery with auto format/quality and a 2000px width cap.
+// Shared with the thumbnail helpers in lib/image-url.ts.
+const optimizeUrl = optimizedUrl;
 
 export default function ImageLightbox({
   photos,
@@ -371,7 +360,7 @@ function LightboxBody({
               const adjacent = Math.abs(i - activeIndex) <= 1;
               return (
                 <div
-                  key={i}
+                  key={p.url}
                   className="flex h-full min-w-0 shrink-0 grow-0 basis-full items-center justify-center"
                   onClick={(e) => {
                     if (isDesktop) {
@@ -484,7 +473,7 @@ function LightboxBody({
           >
             {photos.map((p, i) => (
               <button
-                key={i}
+                key={p.url}
                 type="button"
                 data-thumb-index={i}
                 onClick={() => emblaApi?.scrollTo(i)}

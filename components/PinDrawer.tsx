@@ -20,6 +20,7 @@ import { VisitNotes, type VisitNoteEntry } from "./ui/VisitNotes";
 import { PreviewPhoto, ReviewCard } from "./PlacePreviewSheet";
 import { fetchGooglePlaceDetails } from "@/lib/google-place-details";
 import { IS_DEMO } from "@/lib/demo";
+import { thumbUrl } from "@/lib/image-url";
 import dynamic from "next/dynamic";
 import {
   useScrollShadows,
@@ -326,6 +327,7 @@ export function PinContent({
         setLightbox({
           photos: photos.map((p) => ({
             url: p.image_url,
+            thumbnailUrl: thumbUrl(p.image_url, 120),
             alt: pin.title,
             attribution: p.attribution ?? undefined,
           })),
@@ -766,8 +768,10 @@ function DayGroupCard({
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={p.image_url}
+                src={thumbUrl(p.image_url, 80)}
                 alt=""
+                loading="lazy"
+                decoding="async"
                 className="h-full w-full object-cover"
               />
             </button>

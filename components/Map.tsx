@@ -12,6 +12,10 @@ import {
   Marker,
   type MapRef,
 } from "react-map-gl/mapbox";
+// Note: mapbox-gl itself is deliberately NOT imported statically here.
+// react-map-gl lazy-loads it on mount, which keeps its 460 KB (gz) parse
+// off the hydration critical path. Measured: a static import moved the
+// first frame no earlier and added ~250 ms of main-thread blocking.
 import "mapbox-gl/dist/mapbox-gl.css";
 import { usePins, type Pin } from "@/hooks/usePins";
 import { useProfiles, type Profile } from "@/hooks/useProfiles";
@@ -198,10 +202,24 @@ function addTerrain(map: mapboxgl.Map) {
   map.setTerrain({ source: "mapbox-dem", exaggeration: 1.2 });
 }
 
+// Terrain is invisible from orbit but still costs DEM tile downloads and a
+// per-frame elevation pass. Only turn it on once the camera is close
+// enough for relief to actually show; the zoomend listener below keeps it
+// in sync as the user moves. Below the threshold the source stays idle.
+const TERRAIN_MIN_ZOOM = 8;
+
+function syncTerrain(map: mapboxgl.Map, suppressed: boolean) {
+  const wantTerrain = !suppressed && map.getZoom() >= TERRAIN_MIN_ZOOM;
+  const hasTerrain = map.getTerrain() != null;
+  if (wantTerrain && !hasTerrain) addTerrain(map);
+  else if (!wantTerrain && hasTerrain) map.setTerrain(null);
+}
+
+// Style-dependent layers only. Terrain is owned by the component so it can
+// honour zoom level and pin-focus suppression.
 function applyEnhancements(map: mapboxgl.Map, theme: Theme) {
   applyPaintOverrides(map, theme);
   add3DBuildings(map, theme);
-  addTerrain(map);
 }
 
 function reducedMotion(): boolean {
@@ -287,6 +305,13 @@ const Map = forwardRef<MapHandle, Props>(function Map(
     bearing: number;
   } | null>(null);
   const prevSelectedRef = useRef<LatLng | null>(null);
+  // True while a pin is focused in a theme that wants flat ground
+  // (satellite/Galaxy). Read by syncTerrain via the zoomend listener.
+  const terrainSuppressedRef = useRef(false);
+  // Set on the first user-driven camera move. Once the user has taken the
+  // wheel we never auto-recentre on them.
+  const userMovedRef = useRef(false);
+  const centeredOnPinsRef = useRef(false);
 
   const mapStyle = themesById[resolvedTheme].mapStyle;
 
@@ -311,37 +336,46 @@ const Map = forwardRef<MapHandle, Props>(function Map(
     [],
   );
 
+  // The map mounts immediately with the fallback view so Mapbox can start
+  // downloading its style and tiles in parallel with the pins query
+  // instead of after it. When pins first arrive we glide to their centre,
+  // unless the user has already started exploring.
   const initialViewState = useMemo(() => {
     const c = computeCenter(pins ?? []);
     return initialZoom != null ? { ...c, zoom: initialZoom } : c;
+    // Only the first value is used (initialViewState is read at mount).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (centeredOnPinsRef.current) return;
+    if (!pins || pins.length === 0) return;
+    const map = mapRef.current?.getMap();
+    if (!map) return;
+    centeredOnPinsRef.current = true;
+    if (userMovedRef.current) return;
+    const c = computeCenter(pins);
+    const target = {
+      center: [c.longitude, c.latitude] as [number, number],
+      zoom: initialZoom ?? c.zoom,
+    };
+    if (reducedMotion()) map.jumpTo(target);
+    else map.easeTo({ ...target, duration: 900, essential: true });
   }, [pins, initialZoom]);
 
   // ----------------------------------------------------------
   // Re-apply enhancements when the theme switches the style URL.
   // ----------------------------------------------------------
 
-  const lastStyle = useRef<string | null>(null);
+  // react-map-gl swaps the style itself when the `mapStyle` prop changes
+  // (one network fetch, one reload). A `style.load` listener registered
+  // once in onLoad re-applies the buildings layer, paint overrides and
+  // terrain afterwards; it reads the theme through a ref so the listener
+  // never goes stale.
+  const themeRef = useRef(resolvedTheme);
   useEffect(() => {
-    if (lastStyle.current === null) {
-      lastStyle.current = mapStyle;
-      return;
-    }
-    if (lastStyle.current === mapStyle) return;
-
-    const map = mapRef.current?.getMap();
-    if (!map) return;
-
-    lastStyle.current = mapStyle;
-    map.setStyle(mapStyle);
-
-    // setStyle() wipes the buildings layer, terrain, and paint overrides —
-    // reapply them all once the new style finishes loading.
-    const onceLoaded = () => applyEnhancements(map, themesById[resolvedTheme]);
-    map.once("style.load", onceLoaded);
-    return () => {
-      map.off("style.load", onceLoaded);
-    };
-  }, [mapStyle]);
+    themeRef.current = resolvedTheme;
+  }, [resolvedTheme]);
 
   // ----------------------------------------------------------
   // Cinematic camera on pin open / close
@@ -376,6 +410,7 @@ const Map = forwardRef<MapHandle, Props>(function Map(
       // we did this after, the user would see a crumpled topo morph
       // into flat ground mid-flight, which is jarring.
       if (profile.disableTerrain) {
+        terrainSuppressedRef.current = true;
         map.setTerrain(null);
       }
 
@@ -447,13 +482,9 @@ const Map = forwardRef<MapHandle, Props>(function Map(
         savedCameraRef.current = null;
       }
 
-      // Restore terrain if the active theme had it disabled for the
-      // pin focus. Theme switches handled in the style.load effect
-      // re-call applyEnhancements which re-adds terrain — this path
-      // covers the in-theme close.
-      if (CAMERA_PROFILES[resolvedTheme].disableTerrain) {
-        addTerrain(map);
-      }
+      // Lift the pin-focus suppression. The zoomend listener re-evaluates
+      // terrain once the return flight lands (it'll stay off from orbit).
+      terrainSuppressedRef.current = false;
 
       delete document.documentElement.dataset.mapMode;
     }
@@ -518,14 +549,6 @@ const Map = forwardRef<MapHandle, Props>(function Map(
     );
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex h-full w-full items-center justify-center font-display italic text-ink-soft">
-        loading…
-      </div>
-    );
-  }
-
   if (error) {
     return (
       <div className="flex h-full w-full items-center justify-center text-sm text-accent">
@@ -547,7 +570,27 @@ const Map = forwardRef<MapHandle, Props>(function Map(
         mapStyle={mapStyle}
         style={{ width: "100%", height: "100%" }}
         maxPitch={85}
-        onLoad={(e) => applyEnhancements(e.target, themesById[resolvedTheme])}
+        // Full reload on theme change rather than a diff: our custom
+        // buildings layer / terrain would be diffed away anyway, and a
+        // full load reliably fires `style.load` so we can re-apply them.
+        styleDiffing={false}
+        onLoad={(e) => {
+          const map = e.target;
+          applyEnhancements(map, themesById[themeRef.current]);
+          syncTerrain(map, terrainSuppressedRef.current);
+          map.on("style.load", () => {
+            applyEnhancements(map, themesById[themeRef.current]);
+            syncTerrain(map, terrainSuppressedRef.current);
+          });
+          map.on("zoomend", () =>
+            syncTerrain(map, terrainSuppressedRef.current),
+          );
+          // originalEvent is only present for user gestures, not for
+          // our own flyTo/easeTo calls.
+          map.on("movestart", (ev) => {
+            if (ev.originalEvent) userMovedRef.current = true;
+          });
+        }}
         onClick={(e) => {
           if (!onMapClick) return;
           onMapClick({ lat: e.lngLat.lat, lng: e.lngLat.lng });
@@ -604,7 +647,7 @@ const Map = forwardRef<MapHandle, Props>(function Map(
         )}
       </MapboxMap>
 
-      {!hasAnyPin && (
+      {!hasAnyPin && !isLoading && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-8">
           <p className="font-display italic text-2xl text-ink-soft text-center max-w-xs leading-snug">
             A blank world. Drop your first dream.
