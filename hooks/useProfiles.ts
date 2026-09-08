@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { IS_DEMO } from "@/lib/demo";
 
 export type Profile = {
   user_id: string;
@@ -14,6 +15,7 @@ export function useProfiles() {
   return useQuery<Profile[]>({
     queryKey: ["profiles"],
     queryFn: async () => {
+      if (IS_DEMO) return (await import("@/lib/demo-data")).DEMO_PROFILES;
       const supabase = createClient();
       const { data, error } = await supabase.from("profiles").select("*");
       if (error) throw error;

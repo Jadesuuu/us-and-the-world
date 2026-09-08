@@ -22,6 +22,7 @@ import { useIsDesktop } from "@/lib/use-is-desktop";
 import { usePins } from "@/hooks/usePins";
 import { formatLongDate } from "@/lib/format";
 import { findExistingPin } from "@/lib/geo";
+import { IS_DEMO } from "@/lib/demo";
 import { toast } from "sonner";
 
 export default function Home() {
@@ -280,7 +281,7 @@ export default function Home() {
         />
       </div>
 
-      {isMap && (
+      {isMap && !IS_DEMO && (
         <SearchControl
           onPick={handlePlacePick}
           onFocusChange={setSearchFocused}
@@ -442,6 +443,7 @@ function MemoriesPanel({
       <ImageLightbox
         photos={(lightbox?.photos ?? []).map((p) => ({
           url: p.image_url,
+          attribution: p.attribution ?? undefined,
         }))}
         initialIndex={lightbox?.index ?? 0}
         open={lightbox != null}
@@ -523,7 +525,8 @@ function VisitCard({
     for (const v of entry.visits) {
       if (v.created_by) distinctAuthors.add(v.created_by);
     }
-    if (distinctAuthors.size < 2) return null;
+    // Demo builds always attribute — visitors can't tell the voices apart.
+    if (distinctAuthors.size < 2 && !IS_DEMO) return null;
     const firstAuthorId = entry.visits.find((v) => v.created_by)?.created_by;
     if (!firstAuthorId) return null;
     return profilesByUser[firstAuthorId]?.display_name ?? null;

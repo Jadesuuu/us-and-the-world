@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, Globe } from "lucide-react";
 import { useMemo } from "react";
+import { IS_DEMO } from "@/lib/demo";
 
 interface LinkPreviewData {
   title: string | null;
@@ -34,6 +35,9 @@ interface Props {
 export default function LinkPreview({ url }: Props) {
   const { data, isLoading } = useQuery<LinkPreviewData>({
     queryKey: ["link-preview", url],
+    // The OG proxy is auth-gated and there is no session in demo mode, so
+    // skip the fetch and fall straight through to the domain chip.
+    enabled: !IS_DEMO,
     queryFn: async () => {
       const res = await fetch(
         `/api/link-preview?url=${encodeURIComponent(url)}`,

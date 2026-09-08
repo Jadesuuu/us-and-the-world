@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import GalaxyBackdrop from "@/components/GalaxyBackdrop";
 import PaperTexture from "@/components/PaperTexture";
 import AtmosphericLayer from "@/components/AtmosphericLayer";
+import DemoBanner from "@/components/DemoBanner";
 import { Toaster } from "sonner";
 
 const fraunces = Fraunces({
@@ -86,6 +87,7 @@ export default function RootLayout({
           <PaperTexture />
           <Providers>
             {children}
+            <DemoBanner />
             <Toaster
               position="bottom-center"
               toastOptions={{

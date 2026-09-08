@@ -1,5 +1,7 @@
 "use client";
 
+import { IS_DEMO } from "@/lib/demo";
+
 export type Tab = "map" | "add" | "memories";
 
 interface Props {
@@ -25,14 +27,16 @@ export default function BottomNav({ active, onChange, hidden = false }: Props) {
           isActive={active === "map"}
           onClick={() => onChange("map")}
         />
-        <button
-          type="button"
-          aria-label="Drop a dream"
-          onClick={() => onChange("add")}
-          className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-2xl font-light text-bg"
-        >
-          +
-        </button>
+        {!IS_DEMO && (
+          <button
+            type="button"
+            aria-label="Drop a dream"
+            onClick={() => onChange("add")}
+            className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-2xl font-light text-bg"
+          >
+            +
+          </button>
+        )}
         <TabButton
           label="Lived"
           isActive={active === "memories"}

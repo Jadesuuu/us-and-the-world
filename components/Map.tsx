@@ -225,6 +225,14 @@ function pinFillForTheme(
   if (!profile) return "var(--accent)";
   if (profile.display_name === "Jade") return "var(--pin-jade)";
   if (profile.display_name === "Frances") return "var(--pin-frances)";
+  // Unknown names (e.g. the anonymized demo snapshot): assign the two
+  // hues by profile order so the per-creator distinction survives.
+  const ordered = Object.values(profilesByUser).sort((a, b) =>
+    (a.created_at ?? a.user_id).localeCompare(b.created_at ?? b.user_id),
+  );
+  const index = ordered.findIndex((p) => p.user_id === profile.user_id);
+  if (index === 0) return "var(--pin-jade)";
+  if (index === 1) return "var(--pin-frances)";
   return "var(--accent)";
 }
 

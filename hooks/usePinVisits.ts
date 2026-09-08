@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
+import { IS_DEMO } from "@/lib/demo";
 
 export type VisitPhoto = {
   id: string;
@@ -9,6 +10,9 @@ export type VisitPhoto = {
   image_url: string;
   public_id: string | null;
   created_at: string;
+  // Optional photo credit. Only set on demo-snapshot photos sourced from
+  // Wikimedia Commons; user uploads never carry one.
+  attribution?: string | null;
 };
 
 export type Visit = {
@@ -28,6 +32,10 @@ export function usePinVisits(pinId: string | null) {
     enabled: pinId != null,
     queryFn: async () => {
       if (!pinId) return [];
+      if (IS_DEMO) {
+        const { DEMO_VISITS } = await import("@/lib/demo-data");
+        return DEMO_VISITS.filter((v) => v.pin_id === pinId);
+      }
       const supabase = createClient();
       const { data, error } = await supabase
         .from("visits")

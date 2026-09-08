@@ -19,11 +19,18 @@ import ImageLightbox, { type LightboxPhoto } from "./ImageLightbox";
 import { VisitNotes, type VisitNoteEntry } from "./ui/VisitNotes";
 import { PreviewPhoto, ReviewCard } from "./PlacePreviewSheet";
 import { fetchGooglePlaceDetails } from "@/lib/google-place-details";
+import { IS_DEMO } from "@/lib/demo";
+import dynamic from "next/dynamic";
 import {
   useScrollShadows,
   SCROLL_SHADOW_TOP,
   SCROLL_SHADOW_BOTTOM,
 } from "@/lib/use-scroll-shadows";
+
+// Loaded on demand so the demo snapshot never ships in production bundles.
+const DemoPlaceBlock = dynamic(() => import("./DemoPlaceBlock"), {
+  ssr: false,
+});
 
 interface Props {
   pin: Pin | null;
@@ -89,7 +96,7 @@ export default function PinDrawer({ pin, onClose, readOnly = false }: Props) {
 //   the sidebar regardless of timeline length.
 export function PinContent({
   pin,
-  readOnly,
+  readOnly: readOnlyProp,
   onClose,
   layout,
 }: {
@@ -98,6 +105,9 @@ export function PinContent({
   onClose: () => void;
   layout: "drawer" | "panel";
 }) {
+  // Demo builds are read-only everywhere, regardless of which surface
+  // (mobile drawer, desktop panel, Lived tab) rendered this content.
+  const readOnly = readOnlyProp || IS_DEMO;
   const queryClient = useQueryClient();
   const { data: currentUser } = useCurrentUser();
   const { data: visits = [] } = usePinVisits(pin.id);
@@ -243,7 +253,7 @@ export function PinContent({
   // there. The log-visit form is its own mini-form with internal
   // Cancel/Save buttons, so we hide the panel footer while it's open.
   const showLogAnotherVisit = !readOnly && hasVisits && !logFormOpen;
-  const showDeleteButton = isCreator;
+  const showDeleteButton = isCreator && !IS_DEMO;
   const hasFooter = showLogAnotherVisit || showDeleteButton;
 
   const title = (
@@ -255,10 +265,26 @@ export function PinContent({
     </h2>
   );
 
+  // Demo builds put the dreamer's name above the pin note. The real app
+  // doesn't need it: the marker colour already says who dropped the pin
+  // and there are only two of you.
+  const pinAuthor = pin.created_by
+    ? profilesByUser[pin.created_by]?.display_name
+    : undefined;
   const note = pin.note ? (
-    <p className="mt-2 whitespace-pre-wrap text-[15px] text-ink-soft">
-      {pin.note}
-    </p>
+    <div className="mt-2">
+      {IS_DEMO && pinAuthor && (
+        <p
+          className="font-body uppercase text-[11px] font-medium text-ink-soft"
+          style={{ letterSpacing: "0.06em", marginBottom: 4 }}
+        >
+          {pinAuthor} · dreaming
+        </p>
+      )}
+      <p className="whitespace-pre-wrap text-[15px] text-ink-soft">
+        {pin.note}
+      </p>
+    </div>
   ) : null;
 
   // Inspiration link slot. Three exclusive states:
@@ -298,20 +324,30 @@ export function PinContent({
       profilesByUser={profilesByUser}
       onPhotoClick={(photos, index) =>
         setLightbox({
-          photos: photos.map((p) => ({ url: p.image_url, alt: pin.title })),
+          photos: photos.map((p) => ({
+            url: p.image_url,
+            alt: pin.title,
+            attribution: p.attribution ?? undefined,
+          })),
           index,
         })
       }
     />
   ) : null;
 
-  const prelivedPlace =
-    !hasVisits && pin.google_place_id ? (
-      <PrelivedPlaceBlock
-        placeId={pin.google_place_id}
-        onOpenPhotos={(photos, index) => setLightbox({ photos, index })}
-      />
-    ) : null;
+  // Demo builds swap the Google-backed block for bundled, credited photos
+  // so a dream pin still has something to look at without any API call.
+  const prelivedPlace = hasVisits ? null : IS_DEMO ? (
+    <DemoPlaceBlock
+      pinId={pin.id}
+      onOpenPhotos={(photos, index) => setLightbox({ photos, index })}
+    />
+  ) : pin.google_place_id ? (
+    <PrelivedPlaceBlock
+      placeId={pin.google_place_id}
+      onOpenPhotos={(photos, index) => setLightbox({ photos, index })}
+    />
+  ) : null;
 
   const toggleRow =
     !readOnly && !hasVisits ? (

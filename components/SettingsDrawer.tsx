@@ -12,6 +12,7 @@ import {
   unsubscribeFromPush,
 } from "@/lib/push";
 import { toast } from "sonner";
+import { IS_DEMO } from "@/lib/demo";
 
 interface Props {
   open: boolean;
@@ -40,14 +41,16 @@ export default function SettingsDrawer({ open, onClose }: Props) {
               Settings
             </Drawer.Title>
 
-            <section className="mt-6">
-              <h3 className="font-display italic text-[14px] text-ink-soft">
-                Notifications
-              </h3>
-              <div className="mt-3">
-                <NotificationToggle />
-              </div>
-            </section>
+            {!IS_DEMO && (
+              <section className="mt-6">
+                <h3 className="font-display italic text-[14px] text-ink-soft">
+                  Notifications
+                </h3>
+                <div className="mt-3">
+                  <NotificationToggle />
+                </div>
+              </section>
+            )}
 
             <section className="mt-6">
               <h3 className="font-display italic text-[14px] text-ink-soft">
@@ -73,14 +76,16 @@ export function SettingsContent() {
       <h2 className="font-display italic text-[20px] font-medium text-ink">
         Settings
       </h2>
-      <section className="mt-1">
-        <h3 className="font-display italic text-[13px] text-ink-soft">
-          Notifications
-        </h3>
-        <div className="mt-2">
-          <NotificationToggle />
-        </div>
-      </section>
+      {!IS_DEMO && (
+        <section className="mt-1">
+          <h3 className="font-display italic text-[13px] text-ink-soft">
+            Notifications
+          </h3>
+          <div className="mt-2">
+            <NotificationToggle />
+          </div>
+        </section>
+      )}
       <section className="mt-3">
         <h3 className="font-display italic text-[13px] text-ink-soft">Mood</h3>
         <div className="mt-2">

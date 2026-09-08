@@ -4,8 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:demo": "cross-env NEXT_PUBLIC_DEMO_MODE=1 next dev",
     "build": "next build",
-    "start": "next start"
+    "build:demo": "cross-env NEXT_PUBLIC_DEMO_MODE=1 next build",
+    "start": "next start",
+    "demo:snapshot": "node scripts/build-demo-snapshot.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@googlemaps/js-api-loader": "^2.0.2",
@@ -32,7 +39,11 @@
     "@types/node": "^20",
     "@types/react": "^18.3.28",
     "@types/react-dom": "^18.3.7",
+    "@vitest/coverage-v8": "^3.2.4",
+    "cross-env": "^10.1.0",
+    "sharp": "^0.35.4",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }
